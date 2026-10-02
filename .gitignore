@@ -1,0 +1,6 @@
+node_modules
+dist
+data/projects
+*.log
+.env
+test-results
