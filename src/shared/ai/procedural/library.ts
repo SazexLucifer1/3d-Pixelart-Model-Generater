@@ -38,7 +38,7 @@ export const OBJECT_LIBRARY: Record<ArchetypeId, LibraryEntry> = {
     variants: ['cat', 'dog', 'wolf', 'fox', 'horse', 'unicorn', 'pig', 'cow', 'bear', 'rabbit', 'sheep', 'deer', 'lion'],
   },
   bird: { id: 'bird', name: 'Vogel', build: buildBird, secondaryScale: 0.4, variants: ['bird', 'owl', 'chicken', 'phoenix'], features: ['wings_spread'] },
-  slime: { id: 'slime', name: 'Schleim', build: buildSlime, secondaryScale: 0.45, features: ['crown'] },
+  slime: { id: 'slime', name: 'Schleim', build: buildSlime, secondaryScale: 0.45, features: ['crown', 'glass'] },
   house: { id: 'house', name: 'Haus', build: buildHouse, secondaryScale: 0.8, variants: ['hut', 'cottage', 'stone'], features: ['moss', 'snow', 'chimney', 'smoke', 'lantern', 'glow'] },
   tower: { id: 'tower', name: 'Turm', build: buildTower, secondaryScale: 0.9, variants: ['tower', 'wizard'], features: ['moss', 'snow', 'flag'] },
   castle: { id: 'castle', name: 'Burg', build: buildCastle, secondaryScale: 0.9, features: ['moss', 'snow'] },

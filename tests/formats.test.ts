@@ -65,15 +65,16 @@ describe('Bild → Voxel', () => {
     expect(thick.size).toBe(8 * 3);
   });
 
-  it('dekodiert PNG (RGBA, alle Filtertypen)', () => {
-    const w = 3, h = 5;
-    const rows: number[] = [];
-    for (let y = 0; y < h; y++) {
-      rows.push(y % 5); // Filtertyp 0..4 – mit Rohdaten, die zum Filter passen müssen
-      for (let x = 0; x < w; x++) rows.push(0, 0, 0, 0);
-    }
-    // Nur Filter 0 sicher korrekt bei Nullen: alle Filter liefern bei 0-Daten wieder 0
-    const raw = Uint8Array.from(rows);
+  it('dekodiert PNG (RGBA) inkl. Sub-, Up- und Paeth-Filter', () => {
+    const w = 2, h = 3;
+    // Zeile 0: Filter 1 (Sub): Pixel1 = (10,20,30,255), Pixel2 = Pixel1 + (5,5,5,0)
+    // Zeile 1: Filter 2 (Up):  jeweils +1 gegenüber der Zeile darüber
+    // Zeile 2: Filter 4 (Paeth) mit Delta 0 → übernimmt den Prädiktor
+    const raw = Uint8Array.from([
+      1, 10, 20, 30, 255, 5, 5, 5, 0,
+      2, 1, 1, 1, 0, 1, 1, 1, 0,
+      4, 0, 0, 0, 0, 0, 0, 0, 0,
+    ]);
     const chunk = (type: string, data: Uint8Array) => {
       const b = Buffer.alloc(12 + data.length);
       b.writeUInt32BE(data.length, 0);
@@ -84,12 +85,14 @@ describe('Bild → Voxel', () => {
     const ihdr = Buffer.alloc(13);
     ihdr.writeUInt32BE(w, 0);
     ihdr.writeUInt32BE(h, 4);
-    ihdr[8] = 8; ihdr[9] = 6;
+    ihdr[8] = 8; // Bit-Tiefe
+    ihdr[9] = 6; // RGBA
     const png = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', new Uint8Array())]);
     const img = decodePng(png, (d) => inflateSync(d));
-    expect(img.width).toBe(3);
-    expect(img.height).toBe(5);
-    expect(img.data.length).toBe(3 * 5 * 4);
+    expect([img.width, img.height]).toEqual([2, 3]);
+    expect([...img.data.slice(0, 8)]).toEqual([10, 20, 30, 255, 15, 25, 35, 255]);
+    expect([...img.data.slice(8, 16)]).toEqual([11, 21, 31, 255, 16, 26, 36, 255]);
+    expect([...img.data.slice(16, 24)]).toEqual([11, 21, 31, 255, 16, 26, 36, 255]);
   });
 });
 

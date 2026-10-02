@@ -470,20 +470,21 @@ export class Viewport {
   }
 
   /** Richtet die Kamera so aus, dass das ganze Modell sichtbar ist. */
-  frameModel(direction?: THREE.Vector3): void {
+  frameModel(direction?: THREE.Vector3, margin = 1.15): void {
     const b = this.model?.bounds();
     const center = b ? new THREE.Vector3((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, (b.minZ + b.maxZ) / 2) : new THREE.Vector3(0, 8, 0);
     const radius = b ? Math.max(6, Math.hypot(b.maxX - b.minX + 1, b.maxY - b.minY + 1, b.maxZ - b.minZ + 1) / 2) : 16;
     const dir = direction ?? this.camera.position.clone().sub(this.controls.target).normalize();
     if (dir.lengthSq() < 0.01) dir.set(1, 0.8, 1).normalize();
-    const dist = (radius * 1.15) / Math.tan(THREE.MathUtils.degToRad(this.perspCam.fov / 2));
+    const dist = (radius * margin) / Math.tan(THREE.MathUtils.degToRad(this.perspCam.fov / 2));
     this.controls.target.copy(center);
     this.camera.position.copy(center).addScaledVector(dir, dist);
-    this.orthoHalf = radius * 1.1;
+    this.orthoHalf = radius * (margin - 0.05);
     this.orthoCam.zoom = 1;
     this.updateCameraAspect(this.container.clientWidth || 1, this.container.clientHeight || 1);
     this.camera.lookAt(center);
-    this.controls.update();
+    this.camera.updateMatrixWorld();
+    if (margin === 1.15) this.controls.update();
     this.needsRender = true;
   }
 
@@ -503,7 +504,12 @@ export class Viewport {
    * Rendert ein Bild in beliebiger Größe (für PNG-Export & Sprite-Sheets).
    * @param cameraAngle optionale Drehung um die Hochachse (Radiant)
    */
-  renderToCanvas(width: number, height: number, opts: { transparent?: boolean; cameraAngle?: number; showGrid?: boolean } = {}): HTMLCanvasElement {
+  renderToCanvas(width: number, height: number, opts: { transparent?: boolean; cameraAngle?: number; showGrid?: boolean; fit?: boolean } = {}): HTMLCanvasElement {
+    const prevTarget = this.controls.target.clone();
+    const prevOrthoHalf = this.orthoHalf;
+    const prevZoom = this.orthoCam.zoom;
+    const prevCamPos = this.camera.position.clone();
+    if (opts.fit) this.frameModel(undefined, 1.0);
     const prevSize = new THREE.Vector2();
     this.renderer.getSize(prevSize);
     const prevRatio = this.renderer.getPixelRatio();
@@ -534,7 +540,13 @@ export class Viewport {
     out.getContext('2d')!.drawImage(this.renderer.domElement, 0, 0);
 
     // Zustand wiederherstellen
-    this.camera.position.copy(prevPos);
+    this.camera.position.copy(opts.fit ? prevCamPos : prevPos);
+    if (opts.fit) {
+      this.controls.target.copy(prevTarget);
+      this.orthoHalf = prevOrthoHalf;
+      this.orthoCam.zoom = prevZoom;
+      this.orthoCam.updateProjectionMatrix();
+    }
     this.camera.lookAt(this.controls.target);
     this.grid.visible = prevGrid;
     this.ground.visible = prevGround;

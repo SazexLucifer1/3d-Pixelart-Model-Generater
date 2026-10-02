@@ -133,6 +133,21 @@ export function analyzePrompt(request: GenerationRequest): SceneBlueprint {
     mentions.push({ entry, index: i, count: Math.min(count, 5), sizeMod, placement });
   });
 
+  // 1b) Komposita wie "Skelett-Krieger" / "Drachen-Ritter": direkt benachbarte
+  //     Objekte gleichen Archetyps zu einem Objekt zusammenfassen.
+  for (let k = mentions.length - 1; k > 0; k--) {
+    const a = mentions[k - 1], b = mentions[k];
+    if (b.index === a.index + 1 && a.entry.archetype === b.entry.archetype && !a.entry.count && !b.entry.count) {
+      a.entry = {
+        ...a.entry,
+        features: [...(a.entry.features ?? []), ...(b.entry.features ?? [])],
+        colors: { ...(b.entry.colors ?? {}), ...(a.entry.colors ?? {}) },
+        label: `${a.entry.label}-${b.entry.label}`,
+      };
+      mentions.splice(k, 1);
+    }
+  }
+
   // 2) Ausrüstung → Merkmal einer Figur ---------------------------------
   const humanoids = mentions.filter((m) => m.entry.archetype === 'humanoid');
   const objects: Mention[] = [];
@@ -232,6 +247,13 @@ export function analyzePrompt(request: GenerationRequest): SceneBlueprint {
         slot = PRIMARY_SLOT[subj.spec.archetype];
         break;
       }
+      // Merkmal ohne eigenen Slot ("goldene Krone") → Slot = Merkmal
+      const feat = FEATURES.find((f) => anyStem(t, f.stems, true))?.feature;
+      if (feat) {
+        slot = FEATURE_SLOTS[feat] ?? feat;
+        target = nearestBefore(specs, i)?.spec ?? main;
+        break;
+      }
       if (COLORS.some((c) => anyStem(t, c.stems))) break;
     }
     // b) Slot-Nomen davor ("Rüstung in Grün")
@@ -309,6 +331,9 @@ export function analyzePrompt(request: GenerationRequest): SceneBlueprint {
     notes,
   };
 }
+
+/** Farbslot für Merkmale, deren Name nicht direkt einem Slot entspricht. */
+const FEATURE_SLOTS: Record<string, string> = { helmet: 'metal', horns: 'horn', robe: 'armor', fire: 'flame', glow: 'gem', smoke: 'smoke', snow: 'snow' };
 
 function nearestBefore<T extends { index: number }>(list: T[], index: number): T | undefined {
   let best: T | undefined;

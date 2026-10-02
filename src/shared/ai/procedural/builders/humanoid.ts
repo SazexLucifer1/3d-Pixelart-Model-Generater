@@ -190,9 +190,10 @@ export function buildHumanoid(ctx: BuildContext): void {
   // ---------------------------------------------------------------- Krone
   if (has('crown')) {
     s.layer('Krone', 'head');
-    const y0 = (helmet ? headTop + 2 : headTop + 2);
-    s.shell(-r(4), y0, -r(4), r(4), y0 + 1, r(4), accent, { m: 'metal' });
-    for (const [x, z] of [[-r(4), -r(4)], [r(4), -r(4)], [-r(4), r(4)], [r(4), r(4)], [0, r(4)], [0, -r(4)]]) s.set(x, y0 + 2, z, accent, { m: 'metal' });
+    const y0 = headTop + 2;
+    const crown = col('crown', accent);
+    s.shell(-r(4), y0, -r(4), r(4), y0 + 1, r(4), crown, { m: 'metal' });
+    for (const [x, z] of [[-r(4), -r(4)], [r(4), -r(4)], [-r(4), r(4)], [r(4), r(4)], [0, r(4)], [0, -r(4)]]) s.set(x, y0 + 2, z, crown, { m: 'metal' });
     s.set(0, y0 + 1, r(4) + 1, '#e0284a');
   }
 

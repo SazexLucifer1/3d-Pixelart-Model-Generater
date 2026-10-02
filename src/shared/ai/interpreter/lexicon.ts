@@ -141,6 +141,7 @@ export const FEATURES: { stems: string[]; feature: string }[] = [
   { stems: ['flammen', 'flames', 'brennend', 'burning'], feature: 'fire' },
   { stems: ['ausgebreitet', 'spread', 'fliegend', 'flying'], feature: 'wings_spread' },
   { stems: ['glatze', 'bald', 'kahl'], feature: 'bald' },
+  { stems: ['glas', 'glass', 'durchsichtig', 'transparent', 'glaesern', 'translucent'], feature: 'glass' },
 ];
 
 /** Englisch/Deutsch-Doppeldeutigkeiten: abhängig von der erkannten Sprache. */
@@ -211,6 +212,8 @@ export const SLOTS: { stems: string[]; slot: string }[] = [
   { stems: ['moos', 'moss'], slot: 'moss' },
   { stems: ['stacheln', 'spikes', 'zacken'], slot: 'spikes' },
   { stems: ['maehne', 'mane'], slot: 'accent' },
+  { stems: ['streifen', 'stripes', 'stripe', 'akzente', 'accents', 'verzierung', 'trim', 'muster', 'pattern', 'details'], slot: 'accent' },
+  { stems: ['schnabel', 'beak'], slot: 'beak' },
 ];
 
 /** Primärer Farbslot je Archetyp ("roter Drache" → body). */

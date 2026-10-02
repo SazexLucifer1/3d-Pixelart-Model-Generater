@@ -21,6 +21,13 @@ import { deleteProject, listProjects, loadProject, saveProject } from './project
  *
  * Im Produktionsmodus wird zusätzlich das gebaute Frontend aus dist/ ausgeliefert.
  */
+// .env laden, falls vorhanden (Node ≥ 20.12)
+try {
+  process.loadEnvFile?.();
+} catch {
+  /* keine .env-Datei */
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));

@@ -12,6 +12,14 @@ import { createProceduralGenerator } from '../../shared/ai/generators';
 
 const local = createProceduralGenerator();
 let backendAvailable: boolean | null = null;
+let backendFailedAt = 0;
+/** Nach einem Fehlschlag wird das Backend erst nach dieser Zeit erneut versucht. */
+const RETRY_MS = 15_000;
+
+function markOffline(): void {
+  backendAvailable = false;
+  backendFailedAt = Date.now();
+}
 
 export async function listGenerators(): Promise<{ generators: GeneratorInfo[]; backend: boolean }> {
   try {
@@ -21,13 +29,13 @@ export async function listGenerators(): Promise<{ generators: GeneratorInfo[]; b
     backendAvailable = true;
     return { generators: data.generators, backend: true };
   } catch {
-    backendAvailable = false;
+    markOffline();
     return { generators: [{ id: local.id, name: `${local.name} – im Browser`, description: local.description, available: true }], backend: false };
   }
 }
 
 export async function generate(request: GenerationRequest): Promise<GenerationResult> {
-  if (backendAvailable !== false) {
+  if (backendAvailable !== false || Date.now() - backendFailedAt > RETRY_MS) {
     try {
       const res = await fetch('/api/generate', {
         method: 'POST',
@@ -41,9 +49,10 @@ export async function generate(request: GenerationRequest): Promise<GenerationRe
       const err = await res.json().catch(() => ({ error: res.statusText }));
       // Server erreichbar, aber Fehler → anzeigen statt stillschweigend lokal
       if (res.status !== 404 && res.status !== 502 && res.status !== 504) throw new Error(err.error ?? `Serverfehler ${res.status}`);
+      markOffline();
     } catch (e) {
       if (e instanceof Error && !/fetch|network|Failed|404|502|504/i.test(e.message)) throw e;
-      backendAvailable = false;
+      markOffline();
     }
   }
   // Fallback: lokal im Browser (Web-Thread blockiert nur kurz, < 200 ms)

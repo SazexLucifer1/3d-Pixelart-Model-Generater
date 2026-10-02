@@ -43,8 +43,6 @@ export interface StylePreset {
   lightAdd: number;
   /** Standard-Maximalanzahl Farben bei Palette "Stil". */
   maxColors: number;
-  /** Stärke der eingebackenen Schattierung (Top hell / Unterseite dunkel). */
-  shading: number;
   /** Feste Palette, auf die gemappt wird (überschreibt Paletten-Auswahl). */
   forcedPalette?: string[];
   render: RenderSettings;
@@ -72,7 +70,7 @@ export const STYLE_PRESETS: Record<StyleId, StylePreset> = {
     name: 'Fantasy RPG',
     description: 'Kräftige, warme Farben wie in klassischen 16-Bit JRPGs.',
     hueShift: 0, satMul: 1.1, lightMul: 1, lightAdd: 0.02,
-    maxColors: 32, shading: 0.18,
+    maxColors: 32,
     render: { ...BASE_RENDER },
   },
   scifi: {
@@ -80,7 +78,7 @@ export const STYLE_PRESETS: Record<StyleId, StylePreset> = {
     name: 'Sci-Fi',
     description: 'Kühle Metalltöne, leuchtende Cyan/Magenta-Akzente.',
     hueShift: -8, satMul: 0.9, lightMul: 1, lightAdd: 0,
-    maxColors: 28, shading: 0.2,
+    maxColors: 28,
     render: { ...BASE_RENDER, bgTop: '#0b1a2e', bgBottom: '#05070f', sunColor: '#d6ecff', ambientColor: '#4a6aa8', outlineColor: '#050a14' },
   },
   medieval: {
@@ -88,7 +86,7 @@ export const STYLE_PRESETS: Record<StyleId, StylePreset> = {
     name: 'Medieval',
     description: 'Erdige, leicht entsättigte Holz- und Steintöne.',
     hueShift: 4, satMul: 0.78, lightMul: 0.96, lightAdd: 0,
-    maxColors: 24, shading: 0.2,
+    maxColors: 24,
     render: { ...BASE_RENDER, bgTop: '#3a3530', bgBottom: '#1c1916', sunColor: '#ffe7c0', ambientColor: '#9a8a7a' },
   },
   dark: {
@@ -96,7 +94,7 @@ export const STYLE_PRESETS: Record<StyleId, StylePreset> = {
     name: 'Dark Fantasy',
     description: 'Düster, entsättigt, violette Schatten, glühende Akzente.',
     hueShift: 10, satMul: 0.7, lightMul: 0.72, lightAdd: -0.02,
-    maxColors: 20, shading: 0.26,
+    maxColors: 20,
     render: { ...BASE_RENDER, bgTop: '#1a1024', bgBottom: '#07040b', sunColor: '#c8b8ff', sunIntensity: 1.7, ambientColor: '#5a3a7a', ambientIntensity: 0.9 },
   },
   cute: {
@@ -104,7 +102,7 @@ export const STYLE_PRESETS: Record<StyleId, StylePreset> = {
     name: 'Cute Pixel',
     description: 'Pastellfarben, weiche Kontraste, freundlich.',
     hueShift: 0, satMul: 0.85, lightMul: 1.05, lightAdd: 0.1,
-    maxColors: 24, shading: 0.12,
+    maxColors: 24,
     render: { ...BASE_RENDER, bgTop: '#ffd6e8', bgBottom: '#c8e6ff', outlineColor: '#5a3a5a', sunColor: '#fff8ee', ambientColor: '#ffe0f0', ambientIntensity: 1.4 },
   },
   gameboy: {
@@ -112,7 +110,7 @@ export const STYLE_PRESETS: Record<StyleId, StylePreset> = {
     name: 'Retro Gameboy',
     description: 'Vier Grüntöne wie auf dem originalen Game Boy.',
     hueShift: 0, satMul: 1, lightMul: 1, lightAdd: 0,
-    maxColors: 4, shading: 0.2,
+    maxColors: 4,
     forcedPalette: GAMEBOY_PALETTE,
     render: {
       ...BASE_RENDER, pixelScale: 4, outline: true, outlineColor: '#0f380f',

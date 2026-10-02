@@ -4,6 +4,7 @@ import { runGeneration } from '../hooks/useGeneration';
 import { exportProject, importFile } from '../services/exporters';
 import { VoxelModel } from '../../shared/voxel/VoxelModel';
 import { Icon } from './Icon';
+import { ProjectsDialog } from './ProjectsDialog';
 
 export const EXAMPLE_PROMPTS = [
   'Ein kleiner Fantasy-Krieger mit grüner Rüstung, Schwert und Umhang im Stil eines alten JRPGs',
@@ -28,6 +29,7 @@ export function TopBar({ onExport }: { onExport: () => void }) {
   const generating = useEditor((s) => s.generating);
   const set = useEditor((s) => s.set);
   const [showExamples, setShowExamples] = useState(false);
+  const [showProjects, setShowProjects] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const newProject = () => {
@@ -115,10 +117,14 @@ export function TopBar({ onExport }: { onExport: () => void }) {
         <button className="btn" onClick={() => exportProject()} title="Projekt als .voxproj.json speichern (Strg+S)">
           Speichern
         </button>
+        <button className="btn" onClick={() => setShowProjects(true)} title="Projekte auf dem Server speichern/öffnen">
+          Projekte
+        </button>
         <button className="btn" onClick={onExport} title="Exportieren (PNG, Sprite Sheet, GLTF, OBJ, VOX)">
           Exportieren ▾
         </button>
       </div>
+      {showProjects && <ProjectsDialog onClose={() => setShowProjects(false)} onOpenFile={() => fileRef.current?.click()} />}
     </header>
   );
 }

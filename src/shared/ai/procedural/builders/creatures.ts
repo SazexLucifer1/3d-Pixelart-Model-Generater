@@ -184,13 +184,15 @@ export function buildQuadruped(ctx: BuildContext): void {
     ['Bein vorne rechts', 'leg_fr', 1, 1], ['Bein vorne links', 'leg_fl', -1, 1],
     ['Bein hinten rechts', 'leg_br', 1, -1], ['Bein hinten links', 'leg_bl', -1, -1],
   ];
-  const legR = Math.max(1, r(1.2));
+  // Beine: mindestens 2×2 Voxel dick, damit sie nicht wie Stäbe wirken
+  const legT = Math.max(2, r(2.4));
+  const legC = sp.fluffy ? '#3a3236' : body;
   for (const [name, role, sx, sz] of legs) {
     s.layer(name, role);
-    const x = sx * Math.max(1, brx - legR);
-    const z = sz * Math.max(1, brz - legR - 1);
-    s.box(x - (legR > 1 ? 1 : 0), 0, z - (legR > 1 ? 1 : 0), x + (legR > 1 ? 1 : 0), cy - 1, z + (legR > 1 ? 1 : 0), sp.fluffy ? '#3a3236' : body);
-    s.box(x - (legR > 1 ? 1 : 0), 0, z - (legR > 1 ? 1 : 0), x + (legR > 1 ? 1 : 0), 0, z + (legR > 1 ? 1 : 0), shade(sp.fluffy ? '#3a3236' : body, -0.35));
+    const x0 = sx > 0 ? Math.max(1, brx - legT) : -Math.max(1, brx - legT) - legT + 1;
+    const z0 = sz > 0 ? Math.max(1, brz - legT - 1) : -Math.max(1, brz - legT - 1) - legT + 1;
+    s.box(x0, 0, z0, x0 + legT - 1, cy - 1, z0 + legT - 1, legC);
+    s.box(x0, 0, z0, x0 + legT - 1, 0, z0 + legT - 1, shade(legC, -0.35));
   }
 
   // Kopf
@@ -331,28 +333,42 @@ export function buildBird(ctx: BuildContext): void {
 // ============================================================================
 
 export function buildSlime(ctx: BuildContext): void {
-  const { s, r, col } = ctx;
+  const { s, r, col, has } = ctx;
   const body = col('body', '#4ac86a');
   const rx = r(9), ry = r(7);
+  const glass = has('glass');
   s.layer('Schleim', 'body');
-  for (let y = 0; y <= ry * 1.6; y++) {
-    const t = y / (ry * 1.6);
+  const top = Math.round(ry * 1.6);
+  for (let y = 0; y <= top; y++) {
+    const t = y / top;
     const rad = rx * Math.sqrt(Math.max(0, 1 - t * t)) * (y < 2 ? 0.92 : 1);
-    s.disc('y', 0, 0, 0, y, rad, body, { m: 'glass' });
+    s.disc('y', 0, 0, 0, y, rad, body, glass ? { m: 'glass' } : {});
   }
-  // Kern
-  s.sphere(0, r(4), 0, Math.max(1, r(2.5)), shade(body, -0.35));
-  // Glanzlicht
-  s.box(-r(4), r(9), r(4), -r(3), r(10), r(5), '#ffffff', { paintOnly: true });
+  // Unterseite etwas dunkler, Glanzlicht oben
+  s.recolorWhere((_x, y) => y <= 1, shade(body, -0.2));
+  s.recolorWhere((x, y, z) => y >= top - r(4) && x < 0 && z > 0 && x > -r(5) && !s.has(x, y + 1, z), shade(body, 0.45));
+  if (glass) s.sphere(0, r(4), 0, Math.max(1, r(2.5)), shade(body, -0.35));
   // Gesicht
   s.layer('Gesicht', 'head');
-  const fz = Math.round(rx * 0.85);
-  s.mirrored((side) => s.box(side * r(3), r(5), fz, side * r(3), r(6.5), fz + 1, '#1e1a24'));
-  s.box(-1, r(3.5), fz + 1, 1, r(3.5), fz + 1, '#1e1a24');
+  // Augen auf die Oberfläche legen (vorderster belegter Voxel je Spalte)
+  const surfaceZ = (x: number, y: number) => {
+    for (let z = rx + 1; z >= 0; z--) if (s.has(x, y, z)) return z;
+    return rx;
+  };
+  const ey = r(5.5);
+  s.mirrored((side) => {
+    const ex = side * Math.max(2, r(3));
+    for (let y = ey; y <= ey + Math.max(1, r(1.5)); y++) s.set(ex, y, surfaceZ(ex, y), '#1e1a24', { paintOnly: true });
+    s.set(ex, ey + Math.max(1, r(1.5)), surfaceZ(ex, ey + Math.max(1, r(1.5))), '#ffffff', { paintOnly: true });
+    if (ctx.style.id === 'cute' || s.detail >= 3) s.set(side * Math.max(3, r(5)), ey - 1, surfaceZ(side * Math.max(3, r(5)), ey - 1), '#f08aa0', { paintOnly: true });
+  });
+  for (let x = -1; x <= 1; x++) s.set(x, r(3.5), surfaceZ(x, r(3.5)), x === 0 ? '#1e1a24' : '#5a2a3a', { paintOnly: true });
   if (ctx.has('crown')) {
     s.layer('Krone', 'accessory');
     const y0 = Math.round(ry * 1.6);
-    s.shell(-r(3), y0, -r(3), r(3), y0 + 1, r(3), C.gold, { m: 'metal' });
-    for (const [x, z] of [[-r(3), 0], [r(3), 0], [0, r(3)], [0, -r(3)]]) s.set(x, y0 + 2, z, C.gold, { m: 'metal' });
+    const crown = col('crown', C.gold);
+    s.shell(-r(3), y0, -r(3), r(3), y0 + 1, r(3), crown, { m: 'metal' });
+    for (const [x, z] of [[-r(3), 0], [r(3), 0], [0, r(3)], [0, -r(3)]]) s.set(x, y0 + 2, z, crown, { m: 'metal' });
+    s.set(0, y0 + 1, r(3) + 1, '#e0284a');
   }
 }

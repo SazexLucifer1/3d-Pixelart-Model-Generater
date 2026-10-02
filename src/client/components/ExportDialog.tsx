@@ -12,6 +12,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const [err, setErr] = useState<string | null>(null);
   const [pngSize, setPngSize] = useState(1024);
   const [transparent, setTransparent] = useState(true);
+  const [fit, setFit] = useState(true);
   const [cell, setCell] = useState(128);
   const [dirs, setDirs] = useState<1 | 4 | 8>(4);
   const [clipId, setClipId] = useState<string>(s.animations[0]?.id ?? '');
@@ -50,9 +51,12 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
               <label className="check" style={{ margin: 0 }}>
                 <input type="checkbox" checked={transparent} onChange={(e) => setTransparent(e.target.checked)} /> Transparenter Hintergrund
               </label>
+              <label className="check" style={{ margin: 0 }}>
+                <input type="checkbox" checked={fit} onChange={(e) => setFit(e.target.checked)} /> Modell einpassen
+              </label>
             </div>
             <div className="export-grid">
-              <button className="export-card" disabled={busy || empty || !vp} onClick={() => run(() => exportPng(vp!, name, pngSize, pngSize, transparent))}>
+              <button className="export-card" disabled={busy || empty || !vp} onClick={() => run(() => exportPng(vp!, name, pngSize, pngSize, transparent, fit))}>
                 <b>PNG Render</b>
                 <span>Aktuelle Kameraansicht im Pixel-Art-Rendering</span>
               </button>

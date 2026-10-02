@@ -42,14 +42,14 @@ function canvasToBlob(c: HTMLCanvasElement): Promise<Blob> {
 
 // -------------------------------------------------------------------- Export
 
-export async function exportPng(vp: Viewport, name: string, width: number, height: number, transparent: boolean): Promise<void> {
-  const canvas = vp.renderToCanvas(width, height, { transparent });
+export async function exportPng(vp: Viewport, name: string, width: number, height: number, transparent: boolean, fit = false): Promise<void> {
+  const canvas = vp.renderToCanvas(width, height, { transparent, fit });
   download(await canvasToBlob(canvas), `${slug(name)}.png`);
 }
 
 /** Kleines Vorschaubild für den Generierungsverlauf. */
 export function thumbnail(vp: Viewport): string {
-  return vp.renderToCanvas(160, 120, { transparent: false }).toDataURL('image/png');
+  return vp.renderToCanvas(160, 120, { transparent: false, fit: true }).toDataURL('image/png');
 }
 
 /**
@@ -80,7 +80,7 @@ export async function exportSpriteSheet(
       const f = frames[c];
       vp.setModel(f ? applyFrame(model, f) : model);
       vp.flush();
-      const img = vp.renderToCanvas(opts.cell, opts.cell, { transparent: opts.transparent, cameraAngle: (r / rows) * Math.PI * 2 });
+      const img = vp.renderToCanvas(opts.cell, opts.cell, { transparent: opts.transparent, cameraAngle: (r / rows) * Math.PI * 2, fit: true });
       ctx.drawImage(img, c * opts.cell, r * opts.cell);
       meta.frames[`dir${r}_frame${c}`] = { x: c * opts.cell, y: r * opts.cell, w: opts.cell, h: opts.cell, direction: Math.round((r / rows) * 360), frame: c };
     }
