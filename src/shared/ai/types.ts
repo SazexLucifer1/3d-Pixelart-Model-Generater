@@ -2,6 +2,7 @@ import type { PaletteId, StyleId } from '../palette/styles';
 import type { SerializedModel } from '../voxel/VoxelModel';
 import type { AnimationClip } from '../animation/types';
 import type { MaterialType } from '../voxel/types';
+import type { StyleProfile, Proportions } from '../style/profile';
 
 /**
  * ============================================================================
@@ -43,6 +44,8 @@ export interface GenerationRequest {
   seed?: number;
   /** Bevorzugter Generator (z.B. "procedural", "claude"). */
   generator?: string;
+  /** Aktives Stilprofil (Style Lock): Palette, Farbstimmung, Proportionen … */
+  profile?: StyleProfile;
 }
 
 /** Bekannte Objekt-Archetypen der prozeduralen Bibliothek. */
@@ -113,6 +116,8 @@ export interface SceneBlueprint {
   mood?: 'day' | 'night';
   /** Nachvollziehbares Analyse-Log für die UI. */
   notes: string[];
+  /** Körperproportionen (aus dem Stilprofil). */
+  proportions?: Proportions;
 }
 
 /** Ergebnis jeder Generierung – unabhängig vom verwendeten Generator. */

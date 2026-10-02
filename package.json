@@ -12,12 +12,14 @@
     "start": "NODE_ENV=production tsx server/index.ts",
     "typecheck": "tsc -p .",
     "test": "vitest run",
-    "generate": "tsx scripts/generate-cli.ts"
+    "generate": "tsx scripts/generate-cli.ts",
+    "sprite": "tsx scripts/sprite-cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "fflate": "^0.8.3",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "three": "^0.186.1",

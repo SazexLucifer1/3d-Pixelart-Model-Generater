@@ -6,6 +6,7 @@ import { OBJECT_LIBRARY } from './library';
 import type { GenerationRequest, SceneBlueprint, ObjectSpec } from '../types';
 import { STYLE_PRESETS, PALETTES, applyStyleColor, mapToPalette, type StylePreset } from '../../palette/styles';
 import { reduceColors, shade } from '../../palette/color';
+import { applyColorMood, lockColor } from '../../style/profile';
 
 /**
  * Baut aus einem SceneBlueprint ein echtes Voxelmodell.
@@ -17,6 +18,12 @@ import { reduceColors, shade } from '../../palette/color';
  *  4. Stil-Farbtransformation + Palettenbegrenzung
  */
 export function buildScene(blueprint: SceneBlueprint, request: GenerationRequest, seed: number): VoxelModel {
+  // Style Lock: Profil bestimmt Stil, Proportionen und Detailgrad
+  const profile = request.profile?.styleLock ? request.profile : undefined;
+  if (profile) {
+    blueprint = { ...blueprint, style: profile.baseStyle, proportions: profile.design.proportions };
+    request = { ...request, detail: profile.design.detail };
+  }
   const style = STYLE_PRESETS[blueprint.style] ?? STYLE_PRESETS.fantasy;
   const size = clamp(Math.round(request.size), 8, 128);
   const important = new Set<string>();
@@ -132,6 +139,22 @@ function buildBase(scene: VoxelModel, b: Bounds, h: number, kind: SceneBlueprint
 
 /** Wendet Stilfarben an und begrenzt die Palette. */
 function finalizePalette(model: VoxelModel, style: StylePreset, request: GenerationRequest, important: Set<string>): void {
+  const profile = request.profile?.styleLock ? request.profile : undefined;
+  if (profile && !style.forcedPalette) {
+    // Profil-Farbstimmung + gesperrte Projektpalette
+    model.remapColors((hex) => applyColorMood(applyStyleColor(hex, style), profile));
+    if (profile.palette.locked && profile.palette.colors.length) {
+      model.remapColors((hex) => lockColor(hex, profile));
+      return;
+    }
+    const usage = model.colorUsage();
+    const weights = new Map<string, number>();
+    const styledImportant = new Set([...important].map((c) => applyColorMood(applyStyleColor(c, style), profile)));
+    model.palette.forEach((hex, i) => weights.set(hex, (usage.get(i) ?? 0) + (styledImportant.has(hex) ? 1e6 : 0)));
+    const mapping = reduceColors(model.palette, Math.max(4, profile.palette.maxColors), weights);
+    model.remapColors((hex) => mapping.get(hex) ?? hex);
+    return;
+  }
   const fixed = style.forcedPalette ?? PALETTES[request.palette]?.colors;
   const byLum = style.id === 'gameboy' || request.palette === 'gameboy';
   const styledImportant = new Set([...important].map((c) => applyStyleColor(c, style)));

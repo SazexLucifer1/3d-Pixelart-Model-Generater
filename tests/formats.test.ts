@@ -116,7 +116,7 @@ describe('Animationen', () => {
     const res = await createProceduralGenerator().generate({ prompt: 'Ein Ritter', style: 'auto', size: 24, palette: 'style', detail: 2, seed: 1 });
     const base = VoxelModel.fromJSON(res.model);
     const walk = res.animations.find((a) => a.kind === 'walk')!;
-    expect(walk.frames.length).toBe(4);
+    expect(walk.frames.length).toBe(8);
     for (const f of walk.frames) {
       expect(f.set.length + f.remove.length).toBeGreaterThan(0);
       expect(f.set.length + f.remove.length).toBeLessThan(base.size);

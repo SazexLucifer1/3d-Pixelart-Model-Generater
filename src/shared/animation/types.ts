@@ -14,7 +14,12 @@ export interface AnimationFrame {
   duration?: number;
 }
 
-export type AnimationKind = 'idle' | 'walk' | 'attack' | 'fly' | 'flicker' | 'bounce' | 'spin' | 'custom';
+export type AnimationKind =
+  // Charaktere
+  | 'idle' | 'walk' | 'run' | 'sneak' | 'jump' | 'attack' | 'block' | 'dodge' | 'cast' | 'hurt' | 'death' | 'victory' | 'interact'
+  // Kreaturen & Objekte
+  | 'fly' | 'flicker' | 'bounce' | 'spin' | 'open' | 'machine' | 'wind' | 'wave' | 'smoke' | 'water'
+  | 'custom';
 
 export interface AnimationClip {
   id: string;

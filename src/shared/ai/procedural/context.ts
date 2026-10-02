@@ -1,6 +1,7 @@
 import type { Sculptor } from './Sculptor';
 import type { ObjectSpec, SceneBlueprint } from '../types';
 import type { StylePreset } from '../../palette/styles';
+import type { Proportions } from '../../style/profile';
 
 /**
  * Kontext, den jeder Objekt-Builder erhält.
@@ -20,6 +21,8 @@ export interface BuildContext {
   has(feature: string): boolean;
   /** Skaliert einen Wert der Referenzgröße 24 auf die Zielgröße (gerundet). */
   r(v: number): number;
+  /** Körperproportionen aus dem Stilprofil. */
+  proportions: Proportions;
 }
 
 /** Signatur eines Objekt-Builders der Bibliothek. */
@@ -38,5 +41,6 @@ export function makeContext(s: Sculptor, spec: ObjectSpec, H: number, style: Sty
     col: (slot, fallback) => spec.colors[slot] ?? fallback,
     has: (f) => features.has(f),
     r: (v) => Math.round(v * u),
+    proportions: blueprint.proportions ?? 'chibi',
   };
 }

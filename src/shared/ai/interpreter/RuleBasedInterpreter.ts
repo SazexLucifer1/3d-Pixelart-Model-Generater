@@ -292,7 +292,7 @@ export function analyzePrompt(request: GenerationRequest): SceneBlueprint {
   }
   if (!detectedStyle && tokens.includes('dark') && !COLORS.some((c) => anyStem(tokens[tokens.indexOf('dark') + 1] ?? '', c.stems))) detectedStyle = 'dark';
   if (!detectedStyle && (main.archetype === 'spaceship' || main.variant === 'robot')) detectedStyle = 'scifi';
-  const style: StyleId = request.style === 'auto' ? detectedStyle ?? 'fantasy' : request.style;
+  const style: StyleId = request.profile?.styleLock ? request.profile.baseStyle : request.style === 'auto' ? detectedStyle ?? 'fantasy' : request.style;
   notes.push(`Stil: ${STYLE_PRESETS[style].name}${request.style === 'auto' ? ' (automatisch erkannt)' : ''}${detectedStyle && request.style !== 'auto' && detectedStyle !== request.style ? ` – Prompt deutet auf ${STYLE_PRESETS[detectedStyle].name} hin` : ''}`);
 
   const mood = tokens.some((t) => anyStem(t, NIGHT_WORDS)) ? 'night' : 'day';

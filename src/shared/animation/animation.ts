@@ -1,17 +1,16 @@
 import { VoxelModel, packKey, voxelEquals } from '../voxel/VoxelModel';
 import { MATERIAL_TYPES, type Axis, type Voxel } from '../voxel/types';
-import type { AnimationClip, AnimationFrame, AnimationKind } from './types';
+import type { AnimationClip, AnimationFrame } from './types';
 import type { ArchetypeId } from '../ai/types';
-import { Rng } from '../ai/procedural/Sculptor';
+import { animationsFor, buildAnimationModels, type AnimDef } from './library';
 
 /**
- * Animationssystem.
+ * Animationssystem – Kern.
  *
- * Frames werden aus "Ebenen-Transformationen" berechnet (z.B. "linkes Bein
- * 1 Voxel nach vorne", "Waffe 60° um die Schulter drehen") und anschließend
- * als Differenz zum Basismodell gespeichert. Dadurch sind sie unabhängig
- * davon, wie sie entstanden sind – ein späteres KI-System oder der Nutzer
- * können Frames genauso gut direkt erzeugen/bearbeiten.
+ * Frames entstehen aus Ebenen-Transformationen (Gliedmaßen drehen,
+ * Körper neigen, Figur verschieben …) und werden als Differenz zum
+ * Basismodell gespeichert ("Veränderungen der Voxel-Struktur").
+ * Die Pose-Bibliothek liegt in `library.ts`.
  */
 
 // ------------------------------------------------------------- Frame <-> Modell
@@ -50,20 +49,28 @@ export function diffModels(base: VoxelModel, frameModel: VoxelModel): AnimationF
 
 // ---------------------------------------------------------- Transformationen
 
+export type Vec3 = [number, number, number];
+
+/** Ein Transformationsschritt; Schritte werden nacheinander angewendet. */
+export type TransformStep = { rotate: { axis: Axis; deg: number; pivot: Vec3 } } | { translate: Vec3 };
+
 export interface LayerTransform {
   roles: string[];
+  /** Kurzform: Verschiebung (wird nach `rotate`/`steps` angewendet). */
   dx?: number;
   dy?: number;
   dz?: number;
-  rotate?: { axis: Axis; deg: number; pivot: [number, number, number] };
+  rotate?: { axis: Axis; deg: number; pivot: Vec3 };
+  /** Beliebige Schrittfolge, z.B. Arm drehen → Oberkörper neigen → springen. */
+  steps?: TransformStep[];
 }
 
-function layerIdsForRoles(model: VoxelModel, roles: string[]): Set<number> {
+export function layerIdsForRoles(model: VoxelModel, roles: string[]): Set<number> {
   return new Set(model.layers.filter((l) => l.role && roles.includes(l.role)).map((l) => l.id));
 }
 
-/** Pivot einer Rolle: Mitte oben (z.B. Schulter, Hüfte, Flügelansatz). */
-export function rolePivot(model: VoxelModel, roles: string[], where: 'top' | 'center' | 'inner' = 'top'): [number, number, number] | null {
+/** Pivot einer Rolle: Mitte oben (Schulter/Hüfte), Mitte, oder Innenkante. */
+export function rolePivot(model: VoxelModel, roles: string[], where: 'top' | 'center' | 'inner' | 'bottom' = 'top'): Vec3 | null {
   const ids = layerIdsForRoles(model, roles);
   let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
   for (const v of model.values()) {
@@ -75,11 +82,12 @@ export function rolePivot(model: VoxelModel, roles: string[], where: 'top' | 'ce
   if (minX === Infinity) return null;
   const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
   if (where === 'center') return [cx, cy, cz];
+  if (where === 'bottom') return [cx, minY, cz];
   if (where === 'inner') return [Math.abs(minX) < Math.abs(maxX) ? minX : maxX, cy, cz];
   return [cx, maxY, cz];
 }
 
-function rotatePoint(p: [number, number, number], axis: Axis, rad: number, pivot: [number, number, number]): [number, number, number] {
+function rotatePoint(p: Vec3, axis: Axis, rad: number, pivot: Vec3): Vec3 {
   const x = p[0] - pivot[0], y = p[1] - pivot[1], z = p[2] - pivot[2];
   const c = Math.cos(rad), s = Math.sin(rad);
   let nx = x, ny = y, nz = z;
@@ -89,32 +97,58 @@ function rotatePoint(p: [number, number, number], axis: Axis, rad: number, pivot
   return [nx + pivot[0], ny + pivot[1], nz + pivot[2]];
 }
 
-/** Erzeugt einen Frame aus Ebenen-Transformationen. */
-export function makeFrame(base: VoxelModel, transforms: LayerTransform[]): AnimationFrame {
+function stepsOf(t: LayerTransform): TransformStep[] {
+  const steps: TransformStep[] = [];
+  if (t.rotate) steps.push({ rotate: t.rotate });
+  if (t.steps) steps.push(...t.steps);
+  if (t.dx || t.dy || t.dz) steps.push({ translate: [t.dx ?? 0, t.dy ?? 0, t.dz ?? 0] });
+  return steps.filter((s) => ('rotate' in s ? s.rotate.deg % 360 !== 0 : s.translate.some((v) => v !== 0)));
+}
+
+function forward(p: Vec3, steps: TransformStep[]): Vec3 {
+  let q = p;
+  for (const s of steps) q = 'rotate' in s ? rotatePoint(q, s.rotate.axis, (s.rotate.deg * Math.PI) / 180, s.rotate.pivot) : [q[0] + s.translate[0], q[1] + s.translate[1], q[2] + s.translate[2]];
+  return q;
+}
+
+function inverse(p: Vec3, steps: TransformStep[]): Vec3 {
+  let q = p;
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const s = steps[i];
+    q = 'rotate' in s ? rotatePoint(q, s.rotate.axis, (-s.rotate.deg * Math.PI) / 180, s.rotate.pivot) : [q[0] - s.translate[0], q[1] - s.translate[1], q[2] - s.translate[2]];
+  }
+  return q;
+}
+
+/**
+ * Wendet Ebenen-Transformationen an und liefert das neue Modell.
+ * Rotationen nutzen inverses Sampling → lückenlos, harte Pixelkanten.
+ * Reihenfolge: zuerst alle bewegten Voxel entfernen, dann Gruppen in
+ * Listenreihenfolge platzieren (spätere überdecken frühere).
+ */
+export function transformModel(base: VoxelModel, transforms: LayerTransform[], extra: Voxel[] = []): VoxelModel {
   const m = base.clone();
-  const placed: Voxel[] = [];
   const groups = transforms.map((t) => {
     const ids = layerIdsForRoles(base, t.roles);
     const src: Voxel[] = [];
     for (const v of base.values()) if (ids.has(v.l)) src.push(v);
-    return { t, src };
+    return { steps: stepsOf(t), src };
   });
-  // Zuerst alle bewegten Voxel entfernen, dann neu platzieren.
-  for (const { src } of groups) for (const v of src) m.remove(v.x, v.y, v.z);
-  for (const { t, src } of groups) {
-    const dx = t.dx ?? 0, dy = t.dy ?? 0, dz = t.dz ?? 0;
-    if (!t.rotate || t.rotate.deg % 360 === 0) {
-      for (const v of src) placed.push({ ...v, x: v.x + dx, y: v.y + dy, z: v.z + dz });
+  for (const { src, steps } of groups) if (steps.length) for (const v of src) m.remove(v.x, v.y, v.z);
+  const placed: Voxel[] = [];
+  for (const { steps, src } of groups) {
+    if (!steps.length || !src.length) continue;
+    const onlyTranslate = steps.every((s) => 'translate' in s);
+    if (onlyTranslate) {
+      const d = forward([0, 0, 0], steps);
+      for (const v of src) placed.push({ ...v, x: v.x + Math.round(d[0]), y: v.y + Math.round(d[1]), z: v.z + Math.round(d[2]) });
       continue;
     }
-    // Rotation per inversem Sampling (lückenlos, harte Pixelkanten)
-    const { axis, deg, pivot } = t.rotate;
-    const rad = (deg * Math.PI) / 180;
     const map = new Map<number, Voxel>();
     let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
     for (const v of src) {
       map.set(packKey(v.x, v.y, v.z), v);
-      const p = rotatePoint([v.x, v.y, v.z], axis, rad, pivot);
+      const p = forward([v.x, v.y, v.z], steps);
       minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]);
       minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]);
       minZ = Math.min(minZ, p[2]); maxZ = Math.max(maxZ, p[2]);
@@ -122,127 +156,38 @@ export function makeFrame(base: VoxelModel, transforms: LayerTransform[]): Anima
     for (let x = Math.floor(minX) - 1; x <= Math.ceil(maxX) + 1; x++)
       for (let y = Math.floor(minY) - 1; y <= Math.ceil(maxY) + 1; y++)
         for (let z = Math.floor(minZ) - 1; z <= Math.ceil(maxZ) + 1; z++) {
-          const s = rotatePoint([x, y, z], axis, -rad, pivot);
+          const s = inverse([x, y, z], steps);
           const v = map.get(packKey(Math.round(s[0]), Math.round(s[1]), Math.round(s[2])));
-          if (v) placed.push({ ...v, x: x + dx, y: y + dy, z: z + dz });
+          if (v) placed.push({ ...v, x, y, z });
         }
   }
   for (const v of placed) if (v.y >= 0) m.setVoxel(v);
-  return diffModels(base, m);
+  for (const v of extra) if (v.y >= 0) m.setVoxel(v);
+  return m;
+}
+
+/** Erzeugt einen Frame (Differenz) aus Ebenen-Transformationen. */
+export function makeFrame(base: VoxelModel, transforms: LayerTransform[]): AnimationFrame {
+  return diffModels(base, transformModel(base, transforms));
 }
 
 // ------------------------------------------------------- Standard-Animationen
 
-const UPPER = ['body', 'head', 'arm_left', 'arm_right', 'weapon', 'shield', 'cape', 'wing_left', 'wing_right', 'tail', 'accessory'];
-
-function clip(kind: AnimationKind, name: string, fps: number, frames: AnimationFrame[]): AnimationClip {
-  return { id: `${kind}-${Math.random().toString(36).slice(2, 8)}`, name, kind, fps, loop: true, frames };
+/** Wandelt eine Animationsdefinition in einen 3D-Clip (Frames als Diffs). */
+export function clipFromDef(model: VoxelModel, def: AnimDef, frames = def.frames, fps = def.fps): AnimationClip {
+  const models = buildAnimationModels(model, def, frames);
+  return {
+    id: `${def.id}-${Math.random().toString(36).slice(2, 8)}`,
+    name: def.name,
+    kind: def.id,
+    fps,
+    loop: def.loop,
+    frames: models.map((m) => diffModels(model, m)),
+  };
 }
-
-const hasRole = (m: VoxelModel, role: string) => m.layers.some((l) => l.role === role);
 
 /** Erzeugt passende Standard-Animationen für ein generiertes Modell. */
-export function generateAnimations(model: VoxelModel, archetype: ArchetypeId): AnimationClip[] {
-  const clips: AnimationClip[] = [];
-  const f = (t: LayerTransform[]) => makeFrame(model, t);
-
-  if (archetype === 'humanoid') {
-    clips.push(clip('idle', 'Idle (Atmen)', 4, [f([]), f([]), f([{ roles: UPPER, dy: -1 }]), f([{ roles: UPPER, dy: -1 }])]));
-    const armL = ['arm_left', 'shield'], armR = ['arm_right', 'weapon'];
-    clips.push(
-      clip('walk', 'Laufen', 8, [
-        f([{ roles: ['leg_left'], dz: 1, dy: 1 }, { roles: ['leg_right'], dz: -1 }, { roles: armL, dz: -1 }, { roles: armR, dz: 1 }]),
-        f([{ roles: UPPER, dy: 1 }]),
-        f([{ roles: ['leg_right'], dz: 1, dy: 1 }, { roles: ['leg_left'], dz: -1 }, { roles: armR, dz: -1 }, { roles: armL, dz: 1 }]),
-        f([{ roles: UPPER, dy: 1 }]),
-      ]),
-    );
-    const pivot = rolePivot(model, ['arm_right']);
-    if (pivot && hasRole(model, 'weapon')) {
-      const swing = (deg: number, extra: LayerTransform[] = []) => f([{ roles: armR, rotate: { axis: 'x', deg, pivot } }, ...extra]);
-      clips.push(clip('attack', 'Angriff', 8, [swing(-60), swing(-140), swing(-30, [{ roles: UPPER.filter((r) => !armR.includes(r)), dz: 1 }]), swing(0)]));
-    }
-  }
-
-  if (archetype === 'dragon' || archetype === 'quadruped') {
-    const pairA = ['leg_fr', 'leg_bl'], pairB = ['leg_fl', 'leg_br'];
-    const upper = ['body', 'head', 'tail', 'wing_left', 'wing_right'];
-    clips.push(
-      clip('walk', 'Laufen', 8, [
-        f([{ roles: pairA, dz: 1, dy: 1 }, { roles: pairB, dz: -1 }]),
-        f([{ roles: upper, dy: 1 }]),
-        f([{ roles: pairB, dz: 1, dy: 1 }, { roles: pairA, dz: -1 }]),
-        f([{ roles: upper, dy: 1 }]),
-      ]),
-    );
-    clips.push(clip('idle', 'Idle', 4, [f([]), f([{ roles: ['head'], dy: -1 }, { roles: ['tail'], dx: 1 }]), f([]), f([{ roles: ['tail'], dx: -1 }])]));
-  }
-
-  if ((archetype === 'dragon' || archetype === 'bird' || hasRole(model, 'wing_right')) && hasRole(model, 'wing_right')) {
-    const pr = rolePivot(model, ['wing_right'], 'inner');
-    const pl = rolePivot(model, ['wing_left'], 'inner');
-    if (pr && pl) {
-      const flap = (deg: number, dy: number) =>
-        f([
-          { roles: ['wing_right'], dy, rotate: { axis: 'z', deg, pivot: pr } },
-          { roles: ['wing_left'], dy, rotate: { axis: 'z', deg: -deg, pivot: pl } },
-          { roles: ['body', 'head', 'tail', 'legs', 'leg_fr', 'leg_fl', 'leg_br', 'leg_bl', 'flame'], dy },
-        ]);
-      clips.push(clip('fly', 'Fliegen (Flügelschlag)', 8, [flap(0, 1), flap(30, 2), flap(0, 1), flap(-30, 0)]));
-    }
-  }
-
-  if (archetype === 'slime') {
-    clips.push(clip('bounce', 'Hüpfen', 6, [f([]), f([{ roles: ['body', 'head', 'accessory'], dy: 1 }]), f([{ roles: ['body', 'head', 'accessory'], dy: 3 }]), f([{ roles: ['body', 'head', 'accessory'], dy: 1 }])]));
-  }
-
-  if (hasRole(model, 'flame')) clips.push(flickerClip(model));
-
-  if (hasRole(model, 'smoke')) clips.push(clip('idle', 'Rauch', 4, [0, 1, 2, 3].map((i) => f([{ roles: ['smoke'], dy: i, dx: i % 2 }]))));
-  if (hasRole(model, 'flag')) clips.push(clip('idle', 'Fahne weht', 4, [f([]), f([{ roles: ['flag'], dz: 1 }]), f([]), f([{ roles: ['flag'], dz: -1 }])]));
-  if (archetype === 'tree' || hasRole(model, 'leaves')) {
-    clips.push(clip('idle', 'Wind', 3, [f([]), f([{ roles: ['leaves'], dx: 1 }]), f([]), f([{ roles: ['leaves'], dx: -1 }])]));
-  }
-
-  // Einfache Objektbewegungen für Gegenstände
-  if (['weapon', 'potion', 'chest', 'crystal', 'spaceship', 'mushroom', 'custom'].includes(archetype)) {
-    const all = model.layers.map((l) => l.role ?? '').filter(Boolean);
-    const allRoles = [...new Set(all)].filter((r) => r !== 'base');
-    clips.push(clip('bounce', 'Schweben', 6, [0, 1, 2, 1].map((dy) => f([{ roles: allRoles, dy }]))));
-    clips.push(clip('spin', 'Drehen (90°-Schritte)', 4, [0, 90, 180, 270].map((deg) => f(deg === 0 ? [] : [{ roles: allRoles, rotate: { axis: 'y', deg, pivot: modelCenter(model) } }]))));
-  }
-  return clips;
-}
-
-function modelCenter(m: VoxelModel): [number, number, number] {
-  const b = m.bounds();
-  if (!b) return [0, 0, 0];
-  return [Math.round((b.minX + b.maxX) / 2), 0, Math.round((b.minZ + b.maxZ) / 2)];
-}
-
-/** Flackernde Flammen: zufälliges Entfernen/Umfärben der Flammen-Voxel. */
-function flickerClip(model: VoxelModel): AnimationClip {
-  const ids = layerIdsForRoles(model, ['flame']);
-  const flames = [...model.values()].filter((v) => ids.has(v.l));
-  const colors = [...new Set(flames.map((v) => v.c))];
-  const maxY = Math.max(...flames.map((v) => v.y));
-  const minY = Math.min(...flames.map((v) => v.y));
-  const frames: AnimationFrame[] = [];
-  for (let i = 0; i < 4; i++) {
-    const rng = new Rng(1234 + i * 77);
-    const m = model.clone();
-    for (const v of flames) {
-      const t = (v.y - minY) / Math.max(1, maxY - minY);
-      if (rng.chance(t * 0.55)) m.remove(v.x, v.y, v.z);
-      else if (rng.chance(0.3)) m.setVoxel({ ...v, c: colors[rng.int(0, colors.length - 1)] });
-    }
-    // Zusätzliche Flammenzunge
-    const top = flames.filter((v) => v.y === maxY);
-    if (top.length && i % 2 === 0) {
-      const v = top[rng.int(0, top.length - 1)];
-      m.setVoxel({ ...v, y: v.y + 1 });
-    }
-    frames.push(diffModels(model, m));
-  }
-  return clip('flicker', 'Flackern', 8, frames);
+export function generateAnimations(model: VoxelModel, archetype: ArchetypeId | string, ids?: string[]): AnimationClip[] {
+  const defs = animationsFor(model, archetype).filter((d) => !ids || ids.includes(d.id));
+  return defs.map((d) => clipFromDef(model, d));
 }

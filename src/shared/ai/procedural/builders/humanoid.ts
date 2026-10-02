@@ -14,6 +14,13 @@ import { batWing } from './creatures';
  * Merkmale:  sword, axe, hammer, spear, staff, bow, shield, cape, helmet,
  *            hat, crown, beard, horns, wings, tail, elf_ears, robe, armor
  */
+/** Körperbaupläne (Referenzhöhe 24). */
+const PROPORTIONS = {
+  chibi: { legTop: 5, torsoTop: 12, headTop: 22, hw: 5, hd: 4, tw: 4 },
+  jrpg: { legTop: 8, torsoTop: 15, headTop: 22, hw: 4, hd: 3.5, tw: 3.5 },
+  heroic: { legTop: 10, torsoTop: 17.5, headTop: 22.5, hw: 3, hd: 3, tw: 3.5 },
+} as const;
+
 export function buildHumanoid(ctx: BuildContext): void {
   const { s, r, col, has, spec } = ctx;
   const variant = spec.variant ?? 'warrior';
@@ -34,14 +41,17 @@ export function buildHumanoid(ctx: BuildContext): void {
   const gem = col('gem', '#3fd0ff');
 
   // ---------------------------------------------------------------- Maße
-  const legTop = r(5);
-  const torsoTop = r(12);
+  // Proportionen aus dem Stilprofil: Chibi (großer Kopf), JRPG, heroisch
+  const P = PROPORTIONS[ctx.proportions] ?? PROPORTIONS.chibi;
+  const legTop = r(P.legTop);
+  const torsoTop = r(P.torsoTop);
   const headBottom = torsoTop + 1;
-  const headTop = r(22);
-  const hw = r(5); // halbe Kopfbreite
-  const hd = r(4); // halbe Kopftiefe
-  const tw = r(4); // halbe Torsobreite
+  const headTop = Math.max(headBottom + 3, r(P.headTop));
+  const hw = Math.max(2, r(P.hw)); // halbe Kopfbreite
+  const hd = Math.max(2, r(P.hd)); // halbe Kopftiefe
+  const tw = Math.max(2, r(P.tw)); // halbe Torsobreite
   const td = Math.max(1, r(2)); // halbe Torsotiefe
+  const headH = headTop - headBottom;
   const armIn = tw + 1;
   const armOut = tw + Math.max(1, r(2));
   const legIn = Math.max(1, r(1));
@@ -119,9 +129,9 @@ export function buildHumanoid(ctx: BuildContext): void {
   s.layer('Kopf', 'head');
   s.box(-hw, headBottom, -hd, hw, headTop, hd, skin);
   // Gesicht auf der Vorderseite (z = hd)
-  const eyeY = headBottom + r(3.5);
-  const eyeX0 = Math.max(1, r(2)), eyeX1 = Math.max(eyeX0, r(3));
-  const eyeH = Math.max(1, r(1.5));
+  const eyeY = headBottom + Math.max(1, Math.round(headH * 0.38));
+  const eyeX0 = Math.max(1, Math.round(hw * 0.4)), eyeX1 = Math.max(eyeX0, Math.round(hw * 0.65));
+  const eyeH = ctx.proportions === 'heroic' ? 0 : Math.max(1, r(ctx.proportions === 'jrpg' ? 1 : 1.5));
   if (isSkeleton) {
     s.mirrored((side) => {
       s.box(side * eyeX0, eyeY, hd, side * (eyeX1 + 1), eyeY + eyeH, hd, '#1a1420');
@@ -156,13 +166,14 @@ export function buildHumanoid(ctx: BuildContext): void {
     // Helmbusch
     if (detail >= 2) s.box(0, headTop + 2, -hd, 0, headTop + 2 + r(2), hd - 1, cape);
   } else if (!isSkeleton && !isRobot && !has('bald')) {
-    s.box(-hw - 1, headTop - r(2), -hd - 1, hw + 1, headTop + 1, hd + 1, hair, { noise: 0.06 });
+    const fringe = Math.max(1, Math.round(headH * 0.22));
+    s.box(-hw - 1, headTop - fringe, -hd - 1, hw + 1, headTop + 1, hd + 1, hair, { noise: 0.06 });
     s.box(-hw - 1, headBottom + r(1), -hd - 1, hw + 1, headTop, -hd - 1, hair, { noise: 0.06 }); // hinten
     s.mirrored((side) => s.box(side * (hw + 1), eyeY + eyeH, -hd - 1, side * (hw + 1), headTop, hd - 1, hair));
     // Pony mit gezackter Kante
     for (let x = -hw; x <= hw; x++) {
       const drop = (x + hw) % 3 === 0 ? 1 : 0;
-      s.box(x, headTop - r(2) - drop, hd + 1, x, headTop, hd + 1, hair);
+      s.box(x, headTop - fringe - drop, hd + 1, x, headTop, hd + 1, hair);
     }
     if (has('long_hair')) s.box(-hw - 1, torsoTop - r(3), -hd - 1, hw + 1, headBottom, -hd, hair);
   }
