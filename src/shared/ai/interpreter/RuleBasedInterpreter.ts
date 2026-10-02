@@ -92,6 +92,9 @@ interface Mention {
 
 // ---------------------------------------------------------------- Analyse
 
+/** Hinweis, wenn der Offline-Generator kein Motiv erkennt (Ersatz: Kristall). */
+export const UNKNOWN_SUBJECT_NOTE = 'Kein bekanntes Objekt erkannt – verwende Kristall als Ersatz. (Tipp: KI-Schlüssel für freie Motive eintragen)';
+
 export function analyzePrompt(request: GenerationRequest): SceneBlueprint {
   const tokens = normalize(request.prompt);
   const notes: string[] = [];
@@ -162,7 +165,7 @@ export function analyzePrompt(request: GenerationRequest): SceneBlueprint {
   }
 
   if (objects.length === 0) {
-    notes.push('Kein bekanntes Objekt erkannt – verwende Kristall als Ersatz. (Tipp: LLM-Generator für freie Formen aktivieren)');
+    notes.push(UNKNOWN_SUBJECT_NOTE);
     objects.push({ entry: SUBJECTS.find((e) => e.archetype === 'crystal')!, index: 0, count: 1, sizeMod: 1 });
   }
 

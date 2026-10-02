@@ -114,6 +114,6 @@ export const useGame = create<GameState>((set, get) => ({
   notify: (text, kind = 'info') => {
     clearTimeout(toastTimer);
     set({ toast: { text, kind } });
-    toastTimer = setTimeout(() => set({ toast: null }), kind === 'error' ? 7000 : 3500);
+    toastTimer = setTimeout(() => set({ toast: null }), Math.max(kind === 'error' ? 7000 : 3500, text.length * 70));
   },
 }));

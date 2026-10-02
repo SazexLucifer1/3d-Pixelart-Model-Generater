@@ -1,3 +1,5 @@
+// .env laden (API-Schlüssel usw.), auch neben der .exe – vor allen anderen Modulen
+import { envFiles } from './loadEnvFirst';
 import express from 'express';
 import cors from 'cors';
 import { exec } from 'node:child_process';
@@ -10,6 +12,7 @@ import { claudeParseStyle, ClaudeInterpreter } from './providers/claude';
 import { parseStyleText, createProfile, type StyleProfile } from '../src/shared/style/profile';
 import { sanitizeBlueprint } from '../src/shared/ai/generators';
 import { isExe, serveFrontend } from './frontend';
+import { geminiConfigured, geminiParseStyle } from './providers/gemini';
 
 /**
  * Voxel-Forge-Backend (Node.js + Express)
@@ -25,13 +28,6 @@ import { isExe, serveFrontend } from './frontend';
  *
  * Im Produktionsmodus wird zusätzlich das gebaute Frontend aus dist/ ausgeliefert.
  */
-// .env laden, falls vorhanden (Node ≥ 20.12)
-try {
-  process.loadEnvFile?.();
-} catch {
-  /* keine .env-Datei */
-}
-
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '200mb' }));
@@ -108,6 +104,7 @@ app.post('/api/generate', async (req, res) => {
 app.post('/api/interpret', async (req, res) => {
   const { prompt, generator, profile } = req.body ?? {};
   if (typeof prompt !== 'string' || !prompt.trim()) return void res.status(400).json({ error: 'prompt fehlt' });
+  let lastError: string | undefined;
   for (const entry of interpreters) {
     if (generator && generator !== entry.id) continue;
     if (!(await entry.available().catch(() => false))) continue;
@@ -117,25 +114,31 @@ app.post('/api/interpret', async (req, res) => {
       return void res.json({ blueprint, interpreter: entry.id });
     } catch (e) {
       console.error('[interpret]', entry.id, e);
+      lastError = `${entry.id}: ${(e as Error).message}`;
     }
   }
-  res.json({ blueprint: null });
+  res.json({ blueprint: null, error: lastError });
 });
 
-/** Stilbeschreibung → Stilprofil (Claude, falls konfiguriert; sonst Regeln). */
+/** Stilbeschreibung → Stilprofil (Claude/Gemini, falls konfiguriert; sonst Regeln). */
 app.post('/api/style/parse', async (req, res) => {
   const { text, profile } = req.body ?? {};
   if (typeof text !== 'string') return void res.status(400).json({ error: 'text fehlt' });
   const base: StyleProfile = profile && profile.pixel ? { ...createProfile(), ...profile } : createProfile();
   const rules = parseStyleText(text, base);
-  if (ClaudeInterpreter.isConfigured()) {
+  const llms = [
+    { id: 'claude', ok: ClaudeInterpreter.isConfigured(), run: claudeParseStyle },
+    { id: 'gemini', ok: geminiConfigured(), run: geminiParseStyle },
+  ];
+  for (const llm of llms) {
+    if (!llm.ok) continue;
     try {
-      const llm = await claudeParseStyle(text, base);
+      const out = await llm.run(text, base);
       // Gesperrte Paletten (z.B. Game Boy) aus den Regeln übernehmen
-      if (rules.profile.palette.locked && !base.palette.locked) llm.profile.palette = rules.profile.palette;
-      return void res.json(llm);
+      if (rules.profile.palette.locked && !base.palette.locked) out.profile.palette = rules.profile.palette;
+      return void res.json(out);
     } catch (e) {
-      console.error('[style/parse]', e);
+      console.error('[style/parse]', llm.id, e);
     }
   }
   res.json(rules);
@@ -203,6 +206,11 @@ function listen(port: number, triesLeft: number) {
     console.log(`Voxel Forge Backend läuft auf ${url}`);
     registry.list().then((gens) => {
       for (const g of gens) console.log(`  ${g.available ? '✓' : '·'} ${g.id.padEnd(17)} ${g.name}`);
+      console.log(envFiles.length ? `  Einstellungen geladen aus: ${envFiles.join(', ')}` : '  Keine .env gefunden.');
+      if (!gens.some((g) => g.available && ['claude', 'gemini', 'ollama'].includes(g.id))) {
+        console.log('  Hinweis: Keine KI verbunden – nur der Offline-Generator (fester Wortschatz) ist aktiv.');
+        console.log('  Für beliebige Motive eine Datei ".env" mit GEMINI_API_KEY=... oder ANTHROPIC_API_KEY=... neben das Programm legen.');
+      }
     });
     if (isExe()) {
       console.log('\nDer Browser öffnet sich automatisch. Dieses Fenster offen lassen – Schließen beendet Voxel Forge.');

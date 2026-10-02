@@ -12,7 +12,8 @@ import type { JobResult } from '../../shared/sprite/jobs';
 import { docThumbnail } from './spriteCanvas';
 import { thumbnail } from './exporters';
 import { viewportRef } from '../render/viewportRef';
-import { analyzePrompt } from '../../shared/ai/interpreter/RuleBasedInterpreter';
+import { analyzePrompt, UNKNOWN_SUBJECT_NOTE } from '../../shared/ai/interpreter/RuleBasedInterpreter';
+import { listGenerators } from './generationService';
 
 /**
  * Universeller Asset-Generator: ein Prompt → passendes Asset.
@@ -48,7 +49,32 @@ export function selectedAnimations(force: string[] = []): SpriteAnimRequest[] {
     .map(([id, s]) => ({ id, frames: s.frames, fps: s.fps }));
 }
 
-/** Optional: LLM-Blueprint vom Backend (Claude/Ollama), sonst null. */
+/** Optional: LLM-Blueprint vom Backend (Claude/Gemini/Ollama), sonst null. */
+/** Ist ein Sprach-KI-Dienst (Claude, Gemini, Ollama) am Server verbunden? */
+async function llmConnected(): Promise<boolean> {
+  const { generators } = await listGenerators();
+  return generators.some((g) => g.available && ['claude', 'gemini', 'ollama'].includes(g.id));
+}
+
+/**
+ * Ohne KI kennt der Offline-Generator nur seinen festen Wortschatz. Statt
+ * stillschweigend einen Kristall zu bauen, wird klar gemeldet, was fehlt.
+ */
+async function checkOfflineUnderstands(prompt: string, llmAlreadyFailed = false): Promise<boolean> {
+  const bp = analyzePrompt({ prompt, style: 'auto', size: 24, palette: 'style', detail: 2 });
+  if (!bp.notes.includes(UNKNOWN_SUBJECT_NOTE)) return true;
+  if (!llmAlreadyFailed && (await llmConnected())) return true;
+  if (llmAlreadyFailed && (await llmConnected())) {
+    useGame.getState().notify(`Die KI konnte „${nameFromPrompt(prompt)}“ gerade nicht erzeugen (siehe Konsolenfenster), und offline ist der Begriff unbekannt.`, 'error');
+    return false;
+  }
+  useGame.getState().notify(
+    `„${nameFromPrompt(prompt)}“ kennt der Offline-Generator nicht. Für beliebige Motive einen KI-Schlüssel eintragen: Datei „.env“ neben der VoxelForge.exe mit GEMINI_API_KEY=… oder ANTHROPIC_API_KEY=… anlegen und das Programm neu starten.`,
+    'error',
+  );
+  return false;
+}
+
 async function llmBlueprint(prompt: string): Promise<SceneBlueprint | null> {
   const gen = useEditor.getState().gen.generator;
   if (gen === 'procedural') return null;
@@ -59,7 +85,8 @@ async function llmBlueprint(prompt: string): Promise<SceneBlueprint | null> {
       body: JSON.stringify({ prompt, generator: gen === 'auto' ? undefined : gen, profile: useGame.getState().profile() }),
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as { blueprint: SceneBlueprint | null };
+    const data = (await res.json()) as { blueprint: SceneBlueprint | null; error?: string };
+    if (data.error) useGame.getState().notify(`KI-Fehler: ${data.error} – Offline-Generator wird verwendet`, 'error');
     return data.blueprint;
   } catch {
     return null;
@@ -130,6 +157,7 @@ export async function runAssetGeneration(): Promise<void> {
   g.set({ busy: 'Generiere …', lastNotes: intent.notes });
   try {
     if (intent.output === 'voxel') {
+      if (!(await checkOfflineUnderstands(prompt))) return;
       g.set({ workspace: 'voxel' });
       const r = await runGeneration();
       if (!r) return;
@@ -190,6 +218,7 @@ export async function runAssetGeneration(): Promise<void> {
         const size = spriteSizeFor(intent.category);
         g.set({ busy: `Generiere ${size}×${size}-Sprite …` });
         const blueprint = await llmBlueprint(prompt);
+        if (!blueprint && !(await checkOfflineUnderstands(prompt, true))) return;
         const res = await runAssetJob({
           type: 'sprite', prompt, size, profile, seed, blueprint: blueprint ?? undefined,
           directions: isChar ? currentDirections() : ['down'],

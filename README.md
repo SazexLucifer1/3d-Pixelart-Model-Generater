@@ -39,7 +39,7 @@ Voraussetzung: Node.js ≥ 20.
 npm run build:exe    # → release/VoxelForge.exe (keine Node-Installation nötig)
 ```
 
-Die `.exe` enthält Server und Oberfläche. Doppelklick → ein Konsolenfenster startet den lokalen Server und der Browser öffnet sich automatisch (Port 8787, bei Belegung der nächste freie). Das Fenster offen lassen; Schließen beendet das Programm. Server-Speicherstände landen im Ordner `data/` neben der `.exe`, eine `.env` (z.B. mit `ANTHROPIC_API_KEY`) daneben wird automatisch gelesen. Der Build funktioniert auch unter Linux/macOS (lädt die passende offizielle `node.exe` herunter).
+Die `.exe` enthält Server und Oberfläche. Doppelklick → ein Konsolenfenster startet den lokalen Server und der Browser öffnet sich automatisch (Port 8787, bei Belegung der nächste freie). Das Fenster offen lassen; Schließen beendet das Programm. Server-Speicherstände landen im Ordner `data/` neben der `.exe`, eine `.env` (auch `.env.txt`) daneben wird automatisch gelesen – z.B. mit `GEMINI_API_KEY=…` oder `ANTHROPIC_API_KEY=…`. Das Konsolenfenster zeigt beim Start, welche KI verbunden ist. Der Build funktioniert auch unter Linux/macOS (lädt die passende offizielle `node.exe` herunter).
 
 ---
 
@@ -186,11 +186,14 @@ Das Frontend nutzt bevorzugt das Backend. Ist es nicht erreichbar, läuft der pr
 | Generator | Variablen | Beschreibung |
 |---|---|---|
 | Claude | `ANTHROPIC_API_KEY`, optional `CLAUDE_MODEL` | LLM interpretiert den Prompt per Structured Outputs als Blueprint (inkl. freier Formen) |
+| Gemini | `GEMINI_API_KEY` (oder `GOOGLE_API_KEY`), optional `GEMINI_MODEL` | Google Gemini per JSON-Schema – gleiches Blueprint-Format; ist das Modell nicht verfügbar, wird automatisch ein vorhandenes Flash-/Pro-Modell gewählt |
 | Lokales LLM | `OLLAMA_URL`, `OLLAMA_MODEL` | gleiches Schema über die native Ollama-API, komplett offline |
 | Stable Diffusion | `SD_API_URL` | AUTOMATIC1111/Forge-API: Pixel-Art-Sprite → Hintergrund entfernen → aufblasen |
 | Text-zu-3D | `TEXT_TO_3D_URL` | beliebiger Dienst: `POST {prompt, seed}` → OBJ-Text, wird voxelisiert |
 
-„Automatisch“ wählt Claude → Ollama → prozedural. Fällt ein Dienst aus, wird prozedural weitergearbeitet (mit Hinweis in der KI-Analyse).
+„Automatisch“ wählt Claude → Gemini → Ollama → prozedural.
+
+**Ohne KI-Schlüssel** arbeitet nur der Offline-Generator mit festem Wortschatz (Figuren, Tiere, Gebäude, Natur, Items …). Unbekannte Begriffe werden dann gemeldet statt durch ein Ersatzobjekt ersetzt. Mit einem Schlüssel versteht die KI beliebige Motive und setzt sie aus Bibliotheksobjekten und freien Grundkörpern zusammen. Fällt ein Dienst aus, wird prozedural weitergearbeitet (mit Hinweis in der KI-Analyse).
 
 ### Erweitern
 

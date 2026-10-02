@@ -1,6 +1,7 @@
 import { BlueprintGenerator, GeneratorRegistry, createProceduralGenerator } from '../src/shared/ai/generators';
 import { ClaudeInterpreter } from './providers/claude';
 import { OllamaInterpreter } from './providers/ollama';
+import { GeminiInterpreter, geminiConfigured } from './providers/gemini';
 import { MeshApiGenerator, StableDiffusionGenerator } from './providers/imageModels';
 import type { PromptInterpreter } from '../src/shared/ai/types';
 
@@ -20,8 +21,10 @@ export interface InterpreterEntry {
 export function createRegistry(): { registry: GeneratorRegistry; autoOrder: string[]; interpreters: InterpreterEntry[] } {
   const claude = new ClaudeInterpreter();
   const ollama = new OllamaInterpreter();
+  const gemini = new GeminiInterpreter();
   const interpreters: InterpreterEntry[] = [
     { id: 'claude', interpreter: claude, available: async () => ClaudeInterpreter.isConfigured() },
+    { id: 'gemini', interpreter: gemini, available: async () => geminiConfigured() },
     { id: 'ollama', interpreter: ollama, available: () => OllamaInterpreter.isReachable() },
   ];
   const registry = new GeneratorRegistry()
@@ -32,6 +35,15 @@ export function createRegistry(): { registry: GeneratorRegistry; autoOrder: stri
         'Claude versteht den Prompt (auch komplexe Szenen und freie Formen); die Voxel baut die prozedurale Bibliothek. Benötigt ANTHROPIC_API_KEY.',
         claude,
         async () => ClaudeInterpreter.isConfigured(),
+      ),
+    )
+    .register(
+      new BlueprintGenerator(
+        'gemini',
+        'Gemini (LLM) + Objektbibliothek',
+        'Google Gemini versteht den Prompt (auch freie Formen aus Grundkörpern); die Voxel baut die prozedurale Bibliothek. Benötigt GEMINI_API_KEY.',
+        gemini,
+        async () => geminiConfigured(),
       ),
     )
     .register(
@@ -47,5 +59,5 @@ export function createRegistry(): { registry: GeneratorRegistry; autoOrder: stri
     .register(new MeshApiGenerator())
     .register(createProceduralGenerator());
   // Bild-/Mesh-Generatoren nur auf ausdrücklichen Wunsch, LLMs automatisch
-  return { registry, autoOrder: ['claude', 'ollama', 'procedural'], interpreters };
+  return { registry, autoOrder: ['claude', 'gemini', 'ollama', 'procedural'], interpreters };
 }

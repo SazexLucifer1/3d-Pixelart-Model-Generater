@@ -55,6 +55,7 @@ export const SUBJECTS: SubjectEntry[] = [
   { stems: ['bauer', 'farmer', 'dorfbewohner', 'villager', 'haendler', 'merchant', 'schmied', 'blacksmith', 'koch', 'person', 'mensch', 'mann', 'frau', 'junge', 'maedchen', 'character', 'charakter', 'figur', 'npc', 'man', 'woman', 'boy', 'girl'], archetype: 'humanoid', variant: 'villager', label: 'Figur', colors: { armor: '#5a7aa8' } },
 
   // ----------------------------------------------------------- Kreaturen
+  { stems: ['affe', 'affen', 'aeffchen', 'monkey', 'ape', 'schimpanse', 'chimp', 'gorilla', 'orang', 'pavian', 'baboon'], archetype: 'humanoid', variant: 'villager', label: 'Affe', features: ['tail'], colors: { skin: '#c89a6a', hair: '#5a3420', armor: '#6a4026', cloth: '#6a4026', boots: '#4a2c18', eyes: '#24222b' } },
   { stems: ['drache', 'drachen', 'dragon', 'wyvern', 'lindwurm'], archetype: 'dragon', label: 'Drache' },
   { stems: ['katze', 'kater', 'cat', 'kitten', 'kaetzchen'], archetype: 'quadruped', variant: 'cat', label: 'Katze' },
   { stems: ['hund', 'dog', 'welpe', 'puppy'], archetype: 'quadruped', variant: 'dog', label: 'Hund' },

@@ -19,7 +19,13 @@ const libraryDoc = ARCHETYPE_IDS.filter((id) => id !== 'custom')
 
 export const SYSTEM_PROMPT = `You convert a user's description (German or English) into a JSON scene blueprint for a 3D voxel pixel-art generator in the style of 16/32-bit JRPG and isometric game assets.
 
-The generator has a procedural object library. Prefer library archetypes; use "custom" with primitives only for things the library cannot express, or add primitives to a library object for extra props.
+The generator has a procedural object library. Prefer library archetypes; add primitives to a library object for extra props.
+
+Subjects that are NOT in the library must still look like what the user asked for – never substitute an unrelated object (e.g. never a crystal for "monkey"):
+- Upright creatures (ape, monkey, gorilla, frog-man, lizard-man, bear-man, minotaur, alien …): archetype "humanoid", recolor skin/hair/armor/cloth like fur, scales or skin, add fitting features (tail, horns, elf_ears, wings) and primitives for snouts, ears, manes, beaks. This keeps walk/attack animations working.
+- Four-legged animals not listed (e.g. mouse, lizard, turtle, crocodile, elephant, rhino, camel): archetype "quadruped" with the closest variant, matching colors, and primitives for trunks, shells, horns, long snouts.
+- Flying creatures: "bird" (or "dragon" for large reptiles); jelly/amorphous creatures: "slime".
+- Everything else (vehicles, machines, food, instruments, statues, unusual objects): archetype "custom" with 15–60 primitives that together form a recognizable silhouette. Use several colors (base, shade, accent) and name the parts meaningfully.
 
 Library archetypes:
 ${libraryDoc}
@@ -137,4 +143,58 @@ export function userMessage(prompt: string, size: number, detail: number, style:
     if (profile.palette.locked && profile.palette.colors.length) lines.push(`Use only colors from this project palette: ${profile.palette.colors.join(', ')}.`);
   }
   return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+//  Stilbeschreibung → Stilprofil (gemeinsam für alle LLMs)
+// ---------------------------------------------------------------------------
+
+export const STYLE_SYSTEM_PROMPT =
+  'You translate a game art style description (German or English) into pixel-art style parameters for a sprite generator. saturation and brightness are multipliers around 1.0 (0.5-1.5). Notes: 3-6 short German sentences explaining the interpretation.';
+
+export const STYLE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['baseStyle', 'characterSize', 'tileSize', 'outline', 'outlineColor', 'shadingLevels', 'shadowTone', 'highlightTone', 'saturation', 'brightness', 'tintHue', 'proportions', 'view', 'directions', 'detail', 'notes'],
+  properties: {
+    baseStyle: { type: 'string', enum: ['fantasy', 'scifi', 'medieval', 'dark', 'cute', 'gameboy'] },
+    characterSize: { type: 'integer' },
+    tileSize: { type: 'integer' },
+    outline: { type: 'string', enum: ['black', 'dark', 'colored', 'none'] },
+    outlineColor: { type: 'string' },
+    shadingLevels: { type: 'integer', enum: [2, 3, 4] },
+    shadowTone: { type: 'string', enum: ['warm', 'cool', 'neutral'] },
+    highlightTone: { type: 'string', enum: ['gold', 'white', 'neutral'] },
+    saturation: { type: 'number' },
+    brightness: { type: 'number' },
+    tintHue: { type: 'integer', description: '-1 for no tint, otherwise hue 0-359 of the dominant color mood' },
+    proportions: { type: 'string', enum: ['chibi', 'jrpg', 'heroic'] },
+    view: { type: 'string', enum: ['topdown', 'side', 'iso', 'front'] },
+    directions: { type: 'integer', enum: [1, 4, 8] },
+    detail: { type: 'integer', enum: [1, 2, 3] },
+    notes: { type: 'array', items: { type: 'string' } },
+  },
+} as const;
+
+/** Übernimmt die LLM-Antwort (STYLE_SCHEMA) in eine Kopie des Basisprofils. */
+export function applyStyleOutput(base: StyleProfile, text: string, raw: Record<string, unknown>, model: string): { profile: StyleProfile; notes: string[] } {
+  const out = raw as Record<string, never>;
+  const p: StyleProfile = structuredClone(base);
+  p.description = text;
+  p.baseStyle = out.baseStyle;
+  p.pixel.characterSize = out.characterSize;
+  p.pixel.tileSize = out.tileSize;
+  p.pixel.outline = out.outline;
+  if (/^#[0-9a-f]{6}$/i.test(out.outlineColor)) p.pixel.outlineColor = out.outlineColor;
+  p.pixel.shadingLevels = out.shadingLevels;
+  p.color.shadowTone = out.shadowTone;
+  p.color.highlightTone = out.highlightTone;
+  p.color.saturation = Math.max(0.4, Math.min(1.5, out.saturation));
+  p.color.brightness = Math.max(0.6, Math.min(1.3, out.brightness));
+  p.color.tint = (out.tintHue as number) >= 0 ? { hue: out.tintHue, amount: 0.12 } : null;
+  p.design.proportions = out.proportions;
+  p.design.view = out.view;
+  p.design.directions = out.directions;
+  p.design.detail = out.detail;
+  return { profile: p, notes: [`Interpretiert von ${model}`, ...((out.notes as string[] | undefined) ?? [])] };
 }
