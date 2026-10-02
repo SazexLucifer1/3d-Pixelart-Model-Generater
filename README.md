@@ -26,11 +26,20 @@ Beim ersten Start wird automatisch ein Beispielmodell generiert. Prompt eingeben
 | `npm run dev:client` | Nur Frontend – Generierung läuft dann komplett im Browser |
 | `npm run build && npm start` | Produktionsbuild; das Backend liefert `dist/` mit aus |
 | `npm test` | Unit-Tests (Datenstruktur, Transformationen, Generator, Formate, Animationen) |
+| `npm run build:exe` | Eigenständige Windows-Anwendung `release/VoxelForge.exe` |
 | `npm run typecheck` | TypeScript-Prüfung (Frontend, Backend, Tests) |
 | `npm run generate -- "Ein roter Drache" 32` | 3D-Generierung auf der Kommandozeile (`--save` speichert ein Projekt) |
 | `npm run sprite -- "Ein Waldläufer mit Bogen" 32 out` | 2D-Sprite-Sheet + `metadata.json` + Godot-`.tres` auf der Kommandozeile (optional 4. Argument: Stilbeschreibung) |
 
 Voraussetzung: Node.js ≥ 20.
+
+### Windows-Programm (.exe)
+
+```bash
+npm run build:exe    # → release/VoxelForge.exe (keine Node-Installation nötig)
+```
+
+Die `.exe` enthält Server und Oberfläche. Doppelklick → ein Konsolenfenster startet den lokalen Server und der Browser öffnet sich automatisch (Port 8787, bei Belegung der nächste freie). Das Fenster offen lassen; Schließen beendet das Programm. Server-Speicherstände landen im Ordner `data/` neben der `.exe`, eine `.env` (z.B. mit `ANTHROPIC_API_KEY`) daneben wird automatisch gelesen. Der Build funktioniert auch unter Linux/macOS (lädt die passende offizielle `node.exe` herunter).
 
 ---
 

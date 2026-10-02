@@ -4,3 +4,6 @@ data/projects
 *.log
 .env
 test-results
+build
+release
+data/games

@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { exec } from 'node:child_process';
 import type { GenerationRequest } from '../src/shared/ai/types';
 import { STYLE_PRESETS, PALETTES } from '../src/shared/palette/styles';
 import { createRegistry } from './registry';
@@ -10,6 +9,7 @@ import { listGames, loadGame, saveGame } from './library';
 import { claudeParseStyle, ClaudeInterpreter } from './providers/claude';
 import { parseStyleText, createProfile, type StyleProfile } from '../src/shared/style/profile';
 import { sanitizeBlueprint } from '../src/shared/ai/generators';
+import { isExe, serveFrontend } from './frontend';
 
 /**
  * Voxel-Forge-Backend (Node.js + Express)
@@ -193,17 +193,26 @@ app.delete('/api/projects/:id', async (req, res) => {
   }
 });
 
-// Gebautes Frontend ausliefern (npm run build && npm start)
-const dist = resolve('dist');
-if (existsSync(dist)) {
-  app.use(express.static(dist));
-  app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(resolve(dist, 'index.html')));
-}
+// Gebautes Frontend ausliefern (dist/ oder eingebettet in der .exe)
+serveFrontend(app);
 
-const port = Number(process.env.PORT ?? 8787);
-app.listen(port, () => {
-  console.log(`Voxel Forge Backend läuft auf http://localhost:${port}`);
-  registry.list().then((gens) => {
-    for (const g of gens) console.log(`  ${g.available ? '✓' : '·'} ${g.id.padEnd(17)} ${g.name}`);
+/** Startet den Server; ist der Port belegt, wird der nächste freie genommen (nur .exe). */
+function listen(port: number, triesLeft: number) {
+  const server = app.listen(port, () => {
+    const url = `http://localhost:${port}`;
+    console.log(`Voxel Forge Backend läuft auf ${url}`);
+    registry.list().then((gens) => {
+      for (const g of gens) console.log(`  ${g.available ? '✓' : '·'} ${g.id.padEnd(17)} ${g.name}`);
+    });
+    if (isExe()) {
+      console.log('\nDer Browser öffnet sich automatisch. Dieses Fenster offen lassen – Schließen beendet Voxel Forge.');
+      const cmd = process.platform === 'win32' ? `start "" "${url}"` : process.platform === 'darwin' ? `open ${url}` : `xdg-open ${url}`;
+      exec(cmd, () => undefined);
+    }
   });
-});
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE' && triesLeft > 0) listen(port + 1, triesLeft - 1);
+    else throw err;
+  });
+}
+listen(Number(process.env.PORT ?? 8787), isExe() ? 20 : 0);

@@ -13,7 +13,8 @@
     "typecheck": "tsc -p .",
     "test": "vitest run",
     "generate": "tsx scripts/generate-cli.ts",
-    "sprite": "tsx scripts/sprite-cli.ts"
+    "sprite": "tsx scripts/sprite-cli.ts",
+    "build:exe": "node scripts/build-exe.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
@@ -34,7 +35,9 @@
     "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "^6.1.1",
     "concurrently": "^10.0.5",
+    "esbuild": "^0.28.2",
     "playwright": "^1.63.0",
+    "postject": "^1.0.0-alpha.6",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.2",
