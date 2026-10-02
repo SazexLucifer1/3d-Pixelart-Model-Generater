@@ -1,6 +1,6 @@
-# Voxel Forge – KI 3D Pixel-Art Generator
+# Voxel Forge – KI Game-Asset-Generator (2D Pixel-Art + 3D Voxel)
 
-Voxel Forge erzeugt aus Textbeschreibungen **echte, editierbare 3D-Voxelmodelle** im Stil klassischer 16/32-Bit-Spiele – und öffnet sie direkt in einem MagicaVoxel-artigen Editor.
+Voxel Forge erzeugt aus Textbeschreibungen **komplett editierbare Spiel-Assets**: 2D-Pixel-Art-Sprites inkl. Animationen und Sprite-Sheets, Karten-Tilesets, Effekte, UI-Kits und **3D-Voxelmodelle** – mit einheitlichem Projekt-Stil (Style Lock) und direktem **Godot-Export**. Eine Mischung aus Aseprite, MagicaVoxel, einem vereinfachten Blender, einem KI-Bildgenerator und einer Asset-Pipeline für Solo-Entwickler.
 
 > „Ein kleiner Fantasy-Krieger mit grüner Rüstung, Schwert und Umhang im Stil eines alten JRPGs“
 > „Eine mittelalterliche Holzhütte mit Moos auf dem Dach und einem kleinen Lagerfeuer“
@@ -27,13 +27,48 @@ Beim ersten Start wird automatisch ein Beispielmodell generiert. Prompt eingeben
 | `npm run build && npm start` | Produktionsbuild; das Backend liefert `dist/` mit aus |
 | `npm test` | Unit-Tests (Datenstruktur, Transformationen, Generator, Formate, Animationen) |
 | `npm run typecheck` | TypeScript-Prüfung (Frontend, Backend, Tests) |
-| `npm run generate -- "Ein roter Drache" 32` | Generierung auf der Kommandozeile (`--save` speichert ein Projekt) |
+| `npm run generate -- "Ein roter Drache" 32` | 3D-Generierung auf der Kommandozeile (`--save` speichert ein Projekt) |
+| `npm run sprite -- "Ein Waldläufer mit Bogen" 32 out` | 2D-Sprite-Sheet + `metadata.json` + Godot-`.tres` auf der Kommandozeile (optional 4. Argument: Stilbeschreibung) |
 
 Voraussetzung: Node.js ≥ 20.
 
 ---
 
 ## Funktionen
+
+Die Oberfläche hat vier Arbeitsbereiche: **2D Pixel-Art**, **3D Voxel**, **Bibliothek** und **Stil & Referenzen**. Oben steht immer das Prompt-Feld mit Ausgabe-Wahl (automatisch, 2D-Sprite, 3D-Voxel, Tileset, Effekt, UI). „Automatisch“ erkennt Kategorie und Absicht aus dem Text – z.B. „Erstelle eine Angriff-Animation für diesen Charakter“ fügt dem geöffneten Sprite eine Animation hinzu, statt ein neues Asset zu bauen.
+
+### 2D-Pixel-Generator
+- **Echte Pixelgrafik:** indizierte Bilder (Palettenindex je Pixel), transparenter Hintergrund, feste Auflösung (16 = Gameboy, 32 = klassisches RPG, 64 = detailliert, 128 = moderner Indie oder frei wählbar), begrenzte Palette
+- **Technik:** Text → Voxelmodell in Sprite-Auflösung → deterministischer Pixel-Rasterizer (orthografischer Raycast, stufige Beleuchtung mit Farbrampen und Hue-Shifting, Schlagschatten, Innenlinien, 1-px-Kontur, Glas durchscheinend). Ansichten: vorne, seitlich, Top-down (RPG), isometrisch; 1/2/4/8 Richtungen
+- **Kategorien:** Charaktere (Spieler, NPC, Gegner, Monster, Tiere, Bosse), Items (Schwerter, Äxte, Bögen, Schilde, Rüstung, Helme, Stäbe, Tränke, Werkzeuge, Questitems), Gebäude & Einrichtung (Häuser, Burgen, Türme, Ruinen, Möbel, Türen, Deko), Umgebung (Bäume, Pflanzen, Felsen, Wasser, Berge, Höhlen, Wege, Brücken)
+- **Karten-Tiles:** Biome (Wald, Wiese, Wüste, Winter, Küste, Sumpf, Dungeon, Stadt, Vulkan) mit Grund-Tiles, **Wang-Übergängen** (16 je Terrainpaar), Deko-Objekten und animierten Tiles (Wasser, Lava); 16/32/64/frei
+- **Effekte** (Feuer, Feuerball, Eis, Blitz, Heilung, Gift, Explosion, Rauch, Magie, Schwerthieb, Wasser, Schild, dunkle Magie) und **UI-Kits** (9-Slice-Panel, Buttons, Leisten, Herzen, Münzen, Icons)
+- **Pixel-Editor (Aseprite-ähnlich):** Stift, Radierer, Füllen, Pipette, Linie, Rechteck, Frame verschieben, Frame spiegeln, Pinselgröße, X-Spiegelung beim Zeichnen, Onion-Skin, Raster, Zoom/Pan, Undo/Redo, Palette bearbeiten, Frames hinzufügen/duplizieren/löschen, Live-Vorschau
+
+### Sprite-Sheets & Animationen
+- **Charakter-Animationen:** Idle (Stehen, Atmen, leichte Bewegung), Laufen, Rennen, Schleichen, Springen, Angriff, Blocken, Ausweichen, Zaubern, Treffer, Tod, Sieg, Interagieren; dazu Vierbeiner, Flieger und Schleime
+- **Objekt-Animationen:** Tür öffnen, Truhe öffnen, Feuer/Fackel, Wasserbewegung, Windmühle/Maschinen, Wind in Bäumen, Rauch, schwebende/rotierende Items
+- **Frei einstellbar:** Frames, FPS, Größe, Richtungen, Loop. Posen sind Funktionen der Zeit – jede Frame-Anzahl funktioniert
+- **Animation für bestehenden Charakter:** neue Animationen werden aus demselben Quellmodell mit identischer Rahmung, Pixelgröße und **exakt derselben Palette** gerendert – Farben, Kleidung, Körperform und Fußlinie bleiben unverändert
+- **Metadaten** (`metadata.json`): Frame-Größe, Anzahl, Animationsname, Richtung, Geschwindigkeit, Loop, Position jedes Frames im Sheet
+
+### Stilprofile, Style Lock & Referenzen
+- **Art-Style-Profil** je Projekt: Palette (gesperrt/max. Farben), Sättigung, Helligkeit, Farbstimmung, Schatten-/Lichttöne, Pixelgrößen (Charakter/Tile/Item), Kontur (schwarz/dunkel/farbig/keine), Schattierungsstufen, Lichtrichtung, Proportionen (Chibi/JRPG/heroisch), Ansicht, Richtungen, Detailgrad. Vorlagen (Fantasy RPG, Retro Gameboy, Cute Pixel, Dark Fantasy, Sci-Fi, Indie 128) oder **per Text beschreiben** („32x32, dunkle Fantasy, 4 Richtungen, schwarze Outline …“ – mit Claude oder lokal geparst)
+- **Style Lock:** jedes neue Asset (2D und 3D) übernimmt automatisch Pixelgröße, Palette, Kontur, Perspektive, Licht und Detailgrad – ein später erzeugter Magier passt zum ersten Ritter
+- **Palette aus der Bibliothek lernen:** bestehende Assets analysieren und gemeinsame Projektpalette ableiten
+- **Referenzsystem:** eigene Bilder hochladen → Analyse von Palette, Pixel-Skalierung, Kontur, Schattierungsstufen, Lichtrichtung, Sättigung → ins Profil übernehmen („Erstelle einen Bogenschützen im gleichen Stil“) oder direkt als editierbares Sprite importieren
+
+### Projektbibliothek
+- **Keine vorgefertigte Asset-Datenbank:** die Bibliothek startet leer und enthält nur Assets, die im Projekt generiert oder gezeichnet wurden – plus Stilprofile, Prompts, Paletten und Metadaten
+- Filter nach Kategorie, Suche, Umbenennen, Duplizieren, Öffnen im passenden Editor
+- Autosave im Browser (IndexedDB), Datei-Export/-Import (`.game.json`), Speichern auf dem Server
+- Generierung läuft in einem Web Worker – die Oberfläche bleibt bedienbar
+
+### Godot-Export
+- **2D:** PNG-Sprite-Sheet (indiziert, transparent), Einzelframes, `SpriteFrames`-Ressource (`.tres`, alle Animationen wie idle, walk, attack, hurt, death je Richtung), `metadata.json`; Tilesets als `TileSet`-`.tres` mit Terrain-Peering-Bits (Autotiling) und animierten Tiles
+- **3D:** GLTF/GLB, OBJ, eigenes Voxelformat
+- **Ordnerstruktur:** `res://assets/{characters, weapons, items, buildings, environment, tiles, effects, ui}/<name>/` – z.B. `res://assets/characters/ranger/{ranger.png, ranger.tres, metadata.json}`. Einzelnes Asset oder das ganze Projekt als ZIP (inkl. Palette `.gpl` und Stilprofil)
 
 ### Text → 3D-Voxelmodell
 - **Eingaben:** Beschreibung, Stil (oder automatisch aus dem Prompt), Größe (12–64 Voxel Höhe), Farbpalette, Detailgrad, optionaler Seed (reproduzierbar)
@@ -95,17 +130,23 @@ src/
       generators.ts  BlueprintGenerator, GeneratorRegistry, Blueprint-Validierung
       interpreter/   Regelbasierte Prompt-Analyse + Wortschatz (DE/EN)
       procedural/    Sculptor (Zeichenwerkzeuge), Objektbibliothek, SceneBuilder
-    animation/    Frames als Voxel-Diffs, Standard-Animationen
+    animation/    Frames als Voxel-Diffs, Posen-Bibliothek (Charaktere, Tiere, Objekte, Items)
+    sprite/       Rasterizer (Voxel → Pixel), Sprite-Generator, Sheets, Godot-.tres,
+                  Tiles/Wang-Übergänge, Effekte, UI-Kits, Asset-Jobs, Export-Pakete
+    style/        Stilprofile, Style Lock, Referenz-Bildanalyse
+    library/      Spielprojekt (eigene Assets, Profile, Prompts)
     formats/      Mesher, OBJ, VOX, PNG-Decoder, Mesh-/Bild-Voxelisierung
     project/      Projektformat
   client/                      ← React + Three.js
     render/       Viewport (Szene, Kamera, Picking), PixelPass (Pixel-Shader)
     editor/       ToolController (Maus → Werkzeuge), Aktionen
-    state/        Zustand (zustand) inkl. Undo/Redo
-    services/     Generierung (Backend/Browser-Fallback), Export/Import, Persistenz
-    components/   TopBar, LeftPanel, ViewportView, RightPanel, BottomBar, Dialoge
+    state/        Zustand (zustand): 3D-Editor, Spielprojekt, Pixel-Editor – inkl. Undo/Redo
+    services/     Generierung (Backend/Browser-Fallback, Asset-Routing), Godot-/ZIP-Export, Persistenz (IndexedDB)
+    workers/      Web Worker für Asset-Jobs
+    components/   TopBar, Arbeitsbereiche (sprite/, library/, style/), 3D-Panels, Dialoge
 server/                        ← Node.js + Express
-  index.ts        REST-API (/api/generate, /api/generators, /api/projects)
+  index.ts        REST-API (/api/generate, /api/interpret, /api/style/parse, /api/library, /api/projects)
+  library.ts      Spielprojekte auf dem Server (data/games)
   registry.ts     Registrierung aller KI-Generatoren
   providers/      Claude, Ollama (lokal), Stable Diffusion, Text-zu-3D-API
 ```
@@ -147,7 +188,8 @@ Das Frontend nutzt bevorzugt das Backend. Ist es nicht erreichbar, läuft der pr
 - **Neuer Objekttyp:** Builder in `src/shared/ai/procedural/builders/` schreiben (Zeichenwerkzeuge des `Sculptor`: `box`, `ellipsoid`, `cylinder`, `cone`, `tube`, `triangle`, `recolorWhere` …), in `library.ts` registrieren, Schlüsselwörter in `interpreter/lexicon.ts` ergänzen. Ebenen mit Rollen versehen, damit Animationen funktionieren.
 - **Neues KI-Modell:** `PromptInterpreter` implementieren und mit `BlueprintGenerator` in `server/registry.ts` registrieren – oder direkt `VoxelGenerator` implementieren, wenn das Modell selbst Geometrie liefert.
 - **Neuer Stil / neue Palette:** `src/shared/palette/styles.ts`.
-- **Neue Animation:** `generateAnimations()` in `src/shared/animation/animation.ts` (Ebenen-Transformationen → Frame-Diffs).
+- **Neue Animation:** `AnimDef` in `src/shared/animation/library.ts` ergänzen (`build(rig, t)` liefert Ebenen-Transformationen für Zeitpunkt `t ∈ [0,1)`) – gilt automatisch für 3D-Animationen und 2D-Sprite-Sheets.
+- **Neues Terrain / Biom / Effekt:** `src/shared/sprite/tiles.ts` bzw. `effects.ts`.
 
 ---
 
@@ -157,6 +199,10 @@ Das Frontend nutzt bevorzugt das Backend. Ist es nicht erreichbar, läuft der pr
 |---|---|---|
 | `GET` | `/api/health` | Statusprüfung |
 | `GET` | `/api/generators` | verfügbare Generatoren |
-| `POST` | `/api/generate` | `{prompt, style, size, palette, detail, seed?, generator?}` → `GenerationResult` |
+| `POST` | `/api/generate` | `{prompt, style, size, palette, detail, seed?, generator?, profile?}` → `GenerationResult` |
+| `POST` | `/api/interpret` | `{prompt, …, profile?}` → `{blueprint}` vom LLM (oder `null` ohne KI-Dienst) – für 2D-Sprites |
+| `POST` | `/api/style/parse` | `{text, base?}` → Stilprofil aus einer Textbeschreibung |
+| `GET` | `/api/library` | Spielprojekte auf dem Server auflisten |
+| `GET/PUT` | `/api/library/:id` | Spielprojekt laden / speichern |
 | `GET/POST` | `/api/projects` | Projekte auflisten / speichern |
 | `GET/PUT/DELETE` | `/api/projects/:id` | Projekt laden / überschreiben / löschen |

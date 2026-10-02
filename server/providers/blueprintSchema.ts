@@ -1,6 +1,7 @@
 import { OBJECT_LIBRARY, ARCHETYPE_IDS } from '../../src/shared/ai/procedural/library';
 import { STYLE_LIST } from '../../src/shared/palette/styles';
 import type { SceneBlueprint, ObjectSpec, PrimitiveSpec } from '../../src/shared/ai/types';
+import type { StyleProfile } from '../../src/shared/style/profile';
 
 /**
  * Gemeinsame Bausteine für alle LLM-basierten Interpreter:
@@ -128,6 +129,12 @@ export function extractJson(text: string): unknown {
   }
 }
 
-export function userMessage(prompt: string, size: number, detail: number, style: string): string {
-  return `Description: ${prompt}\nTarget height: ${size} voxels. Detail level: ${detail}/3. Requested style: ${style === 'auto' ? 'choose the best fitting style' : style}.`;
+export function userMessage(prompt: string, size: number, detail: number, style: string, profile?: StyleProfile): string {
+  const lines = [`Description: ${prompt}`, `Target height: ${size} voxels. Detail level: ${detail}/3. Requested style: ${style === 'auto' ? 'choose the best fitting style' : style}.`];
+  if (profile?.styleLock) {
+    // Projekt-Stilprofil (Style Lock): Farben und Design müssen dazu passen
+    lines.push(`Project art style (must be followed): ${profile.description || profile.name}. Base style: ${profile.baseStyle}. Proportions: ${profile.design.proportions}.`);
+    if (profile.palette.locked && profile.palette.colors.length) lines.push(`Use only colors from this project palette: ${profile.palette.colors.join(', ')}.`);
+  }
+  return lines.join('\n');
 }

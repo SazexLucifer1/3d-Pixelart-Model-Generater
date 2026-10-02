@@ -6,6 +6,10 @@ import type { GenerationRequest } from '../src/shared/ai/types';
 import { STYLE_PRESETS, PALETTES } from '../src/shared/palette/styles';
 import { createRegistry } from './registry';
 import { deleteProject, listProjects, loadProject, saveProject } from './projects';
+import { listGames, loadGame, saveGame } from './library';
+import { claudeParseStyle, ClaudeInterpreter } from './providers/claude';
+import { parseStyleText, createProfile, type StyleProfile } from '../src/shared/style/profile';
+import { sanitizeBlueprint } from '../src/shared/ai/generators';
 
 /**
  * Voxel-Forge-Backend (Node.js + Express)
@@ -30,9 +34,9 @@ try {
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '200mb' }));
 
-const { registry, autoOrder } = createRegistry();
+const { registry, autoOrder, interpreters } = createRegistry();
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });
@@ -51,7 +55,8 @@ function parseRequest(body: Partial<GenerationRequest>): GenerationRequest {
   const detail = body.detail === 1 || body.detail === 3 ? body.detail : 2;
   const size = Math.max(8, Math.min(96, Math.round(Number(body.size) || 24)));
   const seed = Number.isFinite(body.seed) ? Math.floor(body.seed!) : undefined;
-  return { prompt: body.prompt.trim(), style, palette, detail, size, seed, generator: body.generator };
+  const profile = body.profile && typeof body.profile === 'object' && body.profile.pixel && body.profile.palette ? { ...createProfile(), ...body.profile } : undefined;
+  return { prompt: body.prompt.trim(), style, palette, detail, size, seed, generator: body.generator, profile };
 }
 
 app.post('/api/generate', async (req, res) => {
@@ -93,6 +98,65 @@ app.post('/api/generate', async (req, res) => {
       return;
     }
     res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+/**
+ * Nur Prompt-Interpretation (LLM → Blueprint). Der Browser baut daraus
+ * Sprites im Web-Worker. Ohne konfiguriertes LLM: { blueprint: null }.
+ */
+app.post('/api/interpret', async (req, res) => {
+  const { prompt, generator, profile } = req.body ?? {};
+  if (typeof prompt !== 'string' || !prompt.trim()) return void res.status(400).json({ error: 'prompt fehlt' });
+  for (const entry of interpreters) {
+    if (generator && generator !== entry.id) continue;
+    if (!(await entry.available().catch(() => false))) continue;
+    try {
+      const request = parseRequest({ prompt, profile, style: profile?.baseStyle ?? 'auto', size: profile?.pixel?.characterSize ?? 32 });
+      const blueprint = sanitizeBlueprint(await entry.interpreter.interpret(request), request);
+      return void res.json({ blueprint, interpreter: entry.id });
+    } catch (e) {
+      console.error('[interpret]', entry.id, e);
+    }
+  }
+  res.json({ blueprint: null });
+});
+
+/** Stilbeschreibung → Stilprofil (Claude, falls konfiguriert; sonst Regeln). */
+app.post('/api/style/parse', async (req, res) => {
+  const { text, profile } = req.body ?? {};
+  if (typeof text !== 'string') return void res.status(400).json({ error: 'text fehlt' });
+  const base: StyleProfile = profile && profile.pixel ? { ...createProfile(), ...profile } : createProfile();
+  const rules = parseStyleText(text, base);
+  if (ClaudeInterpreter.isConfigured()) {
+    try {
+      const llm = await claudeParseStyle(text, base);
+      // Gesperrte Paletten (z.B. Game Boy) aus den Regeln übernehmen
+      if (rules.profile.palette.locked && !base.palette.locked) llm.profile.palette = rules.profile.palette;
+      return void res.json(llm);
+    } catch (e) {
+      console.error('[style/parse]', e);
+    }
+  }
+  res.json(rules);
+});
+
+// Spielprojekte (Bibliothek mit eigenen Assets + Stilprofilen)
+app.get('/api/library', async (_req, res) => {
+  res.json({ games: await listGames() });
+});
+app.get('/api/library/:id', async (req, res) => {
+  try {
+    res.json(await loadGame(req.params.id));
+  } catch {
+    res.status(404).json({ error: 'Spielprojekt nicht gefunden' });
+  }
+});
+app.put('/api/library/:id', async (req, res) => {
+  try {
+    res.json({ id: await saveGame(req.params.id, req.body) });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
   }
 });
 

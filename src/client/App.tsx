@@ -1,41 +1,70 @@
 import { useEffect, useState } from 'react';
 import { TopBar } from './components/TopBar';
+import { WorkspaceTabs } from './components/WorkspaceTabs';
 import { LeftPanel, TOOLS } from './components/LeftPanel';
 import { RightPanel } from './components/RightPanel';
 import { ViewportView } from './components/ViewportView';
 import { BottomBar } from './components/BottomBar';
 import { ExportDialog } from './components/ExportDialog';
+import { SpriteWorkspace } from './components/sprite/SpriteWorkspace';
+import { LibraryWorkspace } from './components/library/LibraryWorkspace';
+import { StyleWorkspace } from './components/style/StyleWorkspace';
 import { useEditor } from './state/editorStore';
+import { useGame } from './state/gameStore';
+import { useSprite } from './state/spriteStore';
 import { actions } from './editor/actions';
 import { viewportRef } from './render/viewportRef';
-import { runGeneration } from './hooks/useGeneration';
 import { autosave, loadGenerationHistory, restoreAutosave } from './services/persistence';
 import { exportProject } from './services/exporters';
+import { loadGameProject, startGameAutosave } from './services/gamePersistence';
+import { runAssetGeneration } from './services/assetGenerator';
+import { parseSpriteDoc } from '../shared/sprite/types';
 
 /**
  * Hauptlayout:
- *   Oben    – Prompt, Generieren, Speichern, Export
- *   Links   – Werkzeuge, Farben, Stil, Detailgrad, Rendering
- *   Mitte   – 3D Pixel-Art Vorschau
- *   Rechts  – Objektinfos, Auswahl, Ebenen, Animationen, KI-Analyse
- *   Unten   – Undo/Redo und Generierungsverlauf
+ *   Oben    – Prompt, Ausgabeformat, Generieren, Speichern/Export
+ *   Tabs    – 2D-Pixel-Editor · 3D-Voxel-Editor · Bibliothek · Stil & Referenzen
+ *   Mitte   – jeweiliger Arbeitsbereich
  */
 export function App() {
   const [showExport, setShowExport] = useState(false);
+  const workspace = useGame((s) => s.workspace);
 
-  // Start: Autosave wiederherstellen oder direkt ein Beispiel generieren
+  // Start: Spielprojekt laden; bei leerem Projekt ein Beispiel generieren
   useEffect(() => {
     useEditor.getState().set({ generationHistory: loadGenerationHistory() });
-    if (!restoreAutosave()) runGeneration();
+    restoreAutosave();
+    const stop = startGameAutosave();
+    loadGameProject().then((ok) => {
+      const g = useGame.getState();
+      g.set({ loaded: true });
+      const first = g.project.assets.find((a) => a.sprite);
+      if (ok && first) {
+        useSprite.getState().load(parseSpriteDoc(first.sprite!), first.id);
+        g.set({ activeSpriteId: first.id });
+      } else if (!g.project.assets.length) {
+        useEditor.getState().set({ prompt: 'Erstelle einen Waldläufer Charakter für mein Fantasy RPG' });
+        runAssetGeneration();
+      }
+    });
+    return stop;
   }, []);
 
-  // Autosave (verzögert nach Änderungen)
+  // 3D-Autosave + Rückschreiben in das Bibliotheks-Asset
   useEffect(() => {
     let t: ReturnType<typeof setTimeout> | undefined;
     const unsub = useEditor.subscribe((s, prev) => {
       if (s.revision === prev.revision) return;
       clearTimeout(t);
-      t = setTimeout(autosave, 1500);
+      t = setTimeout(() => {
+        autosave();
+        const g = useGame.getState();
+        const ed = useEditor.getState();
+        if (g.activeVoxelId && ed.model.size) {
+          const a = g.project.assets.find((x) => x.id === g.activeVoxelId);
+          if (a?.voxel) g.updateAsset(a.id, { voxel: { ...a.voxel, model: ed.model.toJSON(), animations: ed.animations } });
+        }
+      }, 1500);
     });
     return () => {
       unsub();
@@ -43,9 +72,10 @@ export function App() {
     };
   }, []);
 
-  // Tastenkürzel
+  // Tastenkürzel des 3D-Editors (nur im 3D-Arbeitsbereich)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (useGame.getState().workspace !== 'voxel') return;
       const target = e.target as HTMLElement;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) return;
       const s = useEditor.getState();
@@ -101,14 +131,22 @@ export function App() {
   }, []);
 
   return (
-    <div className="app">
+    <div className={`app ws-${workspace}`}>
       <TopBar onExport={() => setShowExport(true)} />
-      <div className="main">
-        <LeftPanel />
-        <ViewportView />
-        <RightPanel />
-      </div>
-      <BottomBar />
+      <WorkspaceTabs />
+      {workspace === 'voxel' && (
+        <>
+          <div className="main">
+            <LeftPanel />
+            <ViewportView />
+            <RightPanel />
+          </div>
+          <BottomBar />
+        </>
+      )}
+      {workspace === 'sprite' && <SpriteWorkspace />}
+      {workspace === 'library' && <LibraryWorkspace />}
+      {workspace === 'style' && <StyleWorkspace />}
       {showExport && <ExportDialog onClose={() => setShowExport(false)} />}
     </div>
   );

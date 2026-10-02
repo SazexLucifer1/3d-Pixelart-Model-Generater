@@ -5,19 +5,22 @@ import type { GenerationRequest, GenerationResult } from '../../shared/ai/types'
 import { viewportRef } from '../render/viewportRef';
 import { thumbnail } from '../services/exporters';
 import { saveGenerationHistory } from '../services/persistence';
+import { useGame } from '../state/gameStore';
 
 /**
  * Startet eine Generierung mit den aktuellen Einstellungen und öffnet das
  * Ergebnis direkt im Editor.
  */
-export async function runGeneration(overrides: Partial<GenerationRequest> = {}): Promise<void> {
+export async function runGeneration(overrides: Partial<GenerationRequest> = {}): Promise<{ result: GenerationResult; request: GenerationRequest } | null> {
   const s = useEditor.getState();
-  if (s.generating) return;
+  if (s.generating) return null;
   const prompt = (overrides.prompt ?? s.prompt).trim();
   if (!prompt) {
     s.set({ generationError: 'Bitte zuerst eine Beschreibung eingeben.' });
-    return;
+    return null;
   }
+  // Style Lock: aktives Projektprofil automatisch übernehmen
+  const profile = useGame.getState().profile();
   const request: GenerationRequest = {
     prompt,
     style: s.gen.style,
@@ -26,14 +29,17 @@ export async function runGeneration(overrides: Partial<GenerationRequest> = {}):
     detail: s.gen.detail,
     seed: s.gen.seed ?? undefined,
     generator: s.gen.generator === 'auto' ? undefined : s.gen.generator,
+    profile: profile.styleLock ? profile : undefined,
     ...overrides,
   };
   s.set({ generating: true, generationError: null });
   try {
     const result = await generate(request);
     applyResult(result, request, true);
+    return { result, request };
   } catch (e) {
     useEditor.getState().set({ generationError: e instanceof Error ? e.message : String(e) });
+    return null;
   } finally {
     useEditor.getState().set({ generating: false });
   }

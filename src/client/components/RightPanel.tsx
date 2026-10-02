@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { useEditor } from '../state/editorStore';
 import { actions } from '../editor/actions';
 import { Icon } from './Icon';
+import { voxelToSprite } from '../services/assetGenerator';
+import { useGame } from '../state/gameStore';
 import { selectionBounds } from '../../shared/voxel/transforms';
 import type { MaterialType } from '../../shared/voxel/types';
 
@@ -26,6 +28,7 @@ function InfoSection() {
   const model = useEditor((s) => s.model);
   const name = useEditor((s) => s.projectName);
   const prompt = useEditor((s) => s.lastRequest?.prompt);
+  const busy = useGame((s) => !!s.busy);
   const info = useMemo(() => {
     const b = model.bounds();
     const usage = model.colorUsage();
@@ -93,6 +96,15 @@ function InfoSection() {
           />
         ))}
       </div>
+      <button
+        className="btn small"
+        style={{ width: '100%', marginTop: 8 }}
+        disabled={model.size === 0 || busy}
+        title="Rendert dieses 3D-Modell (inkl. deiner Voxel-Änderungen) mit dem aktiven Stilprofil als 2D-Pixel-Sprite mit Animationen"
+        onClick={() => voxelToSprite()}
+      >
+        → Als 2D-Sprite rendern (Stilprofil)
+      </button>
       {info.mats.size > 1 && (
         <div className="hint" style={{ marginTop: 6 }}>
           {[...info.mats.entries()].map(([m, n]) => `${m}: ${n}`).join(' · ')}

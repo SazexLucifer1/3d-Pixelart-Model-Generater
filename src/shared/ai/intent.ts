@@ -33,7 +33,7 @@ export const ANIMATION_WORDS: [RegExp, string][] = [
   [/angriff|attack|schlag|hieb|schiess|stich|kampf(?!f)/, 'attack'],
   [/block|parier|abwehr/, 'block'],
   [/ausweich|dodge|rolle|roll/, 'dodge'],
-  [/zauber(n|t|anim)|cast|magie wirk|spell/, 'cast'],
+  [/zauber(?!er|in)|cast|magie wirk|spell/, 'cast'],
   [/schaden|treffer|hurt|getroffen|\bhit\b/, 'hurt'],
   [/tod|sterb|death|\bdie\b|stirbt/, 'death'],
   [/sieg|victory|jubel|triumph/, 'victory'],

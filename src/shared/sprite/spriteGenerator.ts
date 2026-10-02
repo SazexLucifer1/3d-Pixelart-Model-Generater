@@ -5,7 +5,7 @@ import { rasterize, computeFraming } from './rasterizer';
 import { DIRECTION_YAW, directionsFor, type Direction, type SpriteAnimation, type SpriteDoc, type SpriteRenderSettings } from './types';
 import { indexFromHex } from './indexed';
 import { animationsFor, buildAnimationModels, type AnimDef } from '../animation/library';
-import { reduceColors } from '../palette/color';
+import { nearestColor, reduceColors } from '../palette/color';
 import type { GenerationRequest, GenerationResult, SceneBlueprint } from '../ai/types';
 import { buildFromBlueprint } from '../ai/generators';
 import { analyzePrompt } from '../ai/interpreter/RuleBasedInterpreter';
@@ -50,7 +50,7 @@ export function availableAnimations(model: VoxelModel, archetype: string): AnimD
 }
 
 /** Rendert ein komplettes Sprite-Dokument aus einem Voxelmodell. */
-export function renderSpriteDoc(model: VoxelModel, archetype: string, opts: SpriteRenderOptions, render?: SpriteRenderSettings): SpriteDoc {
+export function renderSpriteDoc(model: VoxelModel, archetype: string, opts: SpriteRenderOptions, render?: SpriteRenderSettings, fixedPalette?: string[]): SpriteDoc {
   const { profile } = opts;
   const ppv = render?.ppv ?? modelHeightForSprite(opts.height, profile).ppv;
   const view = render?.view ?? profile.design.view;
@@ -78,7 +78,8 @@ export function renderSpriteDoc(model: VoxelModel, archetype: string, opts: Spri
       });
     }
   }
-  const palette = buildPalette(raw.flatMap((r) => r.frames), profile);
+  // Feste Palette (bestehendes Asset): jede Farbe auf die vorhandene Palette abbilden → keine neuen Farben
+  const palette = fixedPalette ? { colors: fixedPalette } : buildPalette(raw.flatMap((r) => r.frames), profile);
   const animations: SpriteAnimation[] = raw.map((r) => ({
     id: `${r.name}_${r.dir}_${Math.random().toString(36).slice(2, 6)}`,
     name: r.name,
@@ -108,8 +109,12 @@ function buildPalette(frames: (string | null)[][], profile: StyleProfile): { col
   if (!(profile.palette.locked && profile.palette.colors.length)) {
     const max = Math.max(4, Math.min(255, profile.palette.maxColors));
     if (colors.length > max) {
-      const mapping = reduceColors(colors, max, counts);
-      for (const f of frames) for (let i = 0; i < f.length; i++) if (f[i]) f[i] = mapping.get(f[i]!) ?? f[i];
+      const reduced = [...new Set(reduceColors(colors, max, counts).values())];
+      // Jede Originalfarbe auf die NÄCHSTE Palettenfarbe abbilden – exakt wie
+      // beim späteren Nachrendern mit fester Palette (addAnimationsToDoc).
+      // So erzeugt dieselbe Pose immer pixelgenau dieselben Indizes.
+      const mapping = new Map(colors.map((c) => [c, nearestColor(c, reduced)]));
+      for (const f of frames) for (let i = 0; i < f.length; i++) if (f[i]) f[i] = mapping.get(f[i]!)!;
       colors = [...new Set(mapping.values())];
     }
   }
@@ -124,30 +129,17 @@ const lum = (h: string) => {
 
 /**
  * Fügt einem bestehenden Sprite neue Animationen hinzu – mit identischer
- * Quelle, Rahmung und Palette (Style Lock für Animationen).
+ * Quelle, Rahmung und EXAKT derselben Palette (Style Lock für Animationen):
+ * Es kommen keine neuen Farben hinzu.
  */
 export function addAnimationsToDoc(doc: SpriteDoc, animations: SpriteAnimRequest[], profile: StyleProfile, directions?: Direction[]): SpriteDoc {
   if (!doc.source) throw new Error('Dieses Sprite hat kein Quellmodell – neue Animationen können nur für generierte Sprites erzeugt werden.');
   const model = VoxelModel.fromJSON(doc.source.model);
   const dirs = directions ?? ([...new Set(doc.animations.map((a) => a.direction))].filter((d) => d !== 'none') as Direction[]);
-  const fresh = renderSpriteDoc(model, doc.source.archetype, { width: doc.width, height: doc.height, profile, directions: dirs.length ? dirs : ['down'], animations }, doc.source.render);
-  // Farben auf die bestehende Palette abbilden (neue Farben nur anhängen, wenn nötig)
-  const palette = [...doc.palette];
-  const remap = fresh.palette.map((c) => {
-    let i = palette.indexOf(c);
-    if (i < 0 && palette.length < 255) {
-      palette.push(c);
-      i = palette.length - 1;
-    }
-    return i < 0 ? 0 : i + 1;
-  });
-  const newAnims = fresh.animations.map((a) => ({
-    ...a,
-    direction: dirs.length ? a.direction : 'none' as Direction,
-    frames: a.frames.map((f) => ({ ...f, data: f.data.map((v) => (v ? remap[v - 1] : 0)) })),
-  }));
+  const fresh = renderSpriteDoc(model, doc.source.archetype, { width: doc.width, height: doc.height, profile, directions: dirs.length ? dirs : ['down'], animations }, doc.source.render, doc.palette);
+  const newAnims = fresh.animations.map((a) => ({ ...a, direction: dirs.length ? a.direction : ('none' as Direction) }));
   const replaced = new Set(newAnims.map((a) => `${a.name}|${a.direction}`));
-  return { ...doc, palette, animations: [...doc.animations.filter((a) => !replaced.has(`${a.name}|${a.direction}`)), ...newAnims] };
+  return { ...doc, animations: [...doc.animations.filter((a) => !replaced.has(`${a.name}|${a.direction}`)), ...newAnims] };
 }
 
 // ---------------------------------------------------------------------------

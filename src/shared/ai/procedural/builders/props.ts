@@ -351,6 +351,9 @@ export function ruin(ctx: BuildContext, strength = 0.45): void {
   const b = s.model.bounds();
   if (!b) return;
   const H = b.maxY - b.minY + 1;
+  // Dächer sind bei Ruinen eingestürzt (nur Reste bleiben)
+  const roofLayers = new Set(s.model.layers.filter((l) => l.role === 'roof' || l.role === 'flag').map((l) => l.id));
+  for (const v of [...s.model.values()]) if (roofLayers.has(v.l) && hash3(v.x >> 1, v.y >> 1, v.z >> 1, 31) < 0.88) s.model.remove(v.x, v.y, v.z);
   for (const v of [...s.model.values()]) {
     const t = (v.y - b.minY) / H;
     const n = hash3(Math.floor(v.x / 2), Math.floor(v.y / 2), Math.floor(v.z / 2), 77);
@@ -360,7 +363,7 @@ export function ruin(ctx: BuildContext, strength = 0.45): void {
   const moss = ctx.col('moss', '#5a9a3a');
   for (const v of [...s.model.values()]) {
     if (s.model.has(v.x, v.y + 1, v.z)) continue;
-    if (hash3(v.x, v.y, v.z, 5) > 0.45) s.model.setVoxel({ ...v, c: s.model.colorIndex(hash3(v.x, v.z, 1, 9) > 0.5 ? moss : shade(moss, -0.2)) });
+    if (hash3(v.x >> 1, v.y, v.z >> 1, 5) > 0.68) s.model.setVoxel({ ...v, c: s.model.colorIndex(hash3(v.x, v.z, 1, 9) > 0.5 ? moss : shade(moss, -0.2)) });
   }
 }
 

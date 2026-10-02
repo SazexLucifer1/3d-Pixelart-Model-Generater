@@ -37,7 +37,7 @@ export class OllamaInterpreter implements PromptInterpreter {
         options: { temperature: 0.4 },
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userMessage(request.prompt, request.size, request.detail, request.style) },
+          { role: 'user', content: userMessage(request.prompt, request.size, request.detail, request.style, request.profile) },
         ],
       }),
       signal: AbortSignal.timeout(120_000),

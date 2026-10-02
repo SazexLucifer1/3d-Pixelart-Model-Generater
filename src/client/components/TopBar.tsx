@@ -1,24 +1,51 @@
 import { useRef, useState } from 'react';
 import { useEditor } from '../state/editorStore';
-import { runGeneration } from '../hooks/useGeneration';
+import { runAssetGeneration } from '../services/assetGenerator';
+import { useGame } from '../state/gameStore';
+import type { OutputKind } from '../../shared/ai/intent';
+import { exportGameFile } from '../services/gamePersistence';
+import { exportProjectGodot } from '../services/gameExport';
 import { exportProject, importFile } from '../services/exporters';
 import { VoxelModel } from '../../shared/voxel/VoxelModel';
 import { Icon } from './Icon';
 import { ProjectsDialog } from './ProjectsDialog';
 
-export const EXAMPLE_PROMPTS = [
-  'Ein kleiner Fantasy-Krieger mit grüner Rüstung, Schwert und Umhang im Stil eines alten JRPGs',
-  'Eine mittelalterliche Holzhütte mit Moos auf dem Dach und einem kleinen Lagerfeuer',
-  'Ein roter Drache im Pixel-Art-Stil',
-  'Ein alter Magier mit blauer Robe und leuchtendem Stab neben einem Magierturm bei Nacht',
-  'Ein Ritter mit silberner Rüstung, rotem Umhang und Schild',
-  'A cute pink slime with a golden crown',
-  'Ein Zwerg mit Axt vor einer verschneiten Tanne',
-  'Eine Burg mit blauen Dächern auf einer Wiese',
-  'Sci-Fi Raumschiff mit roten Streifen',
-  'Eine offene Schatztruhe voller Gold neben einem Kristall',
-  'Ein Fuchs neben einem Fliegenpilz',
-  'Ein Skelett-Krieger in Dark Fantasy',
+export const EXAMPLE_PROMPTS: { group: string; items: string[] }[] = [
+  { group: 'Charaktere & Gegner (2D-Sprites)', items: [
+    'Erstelle einen Waldläufer Charakter für mein Fantasy RPG',
+    'Ein weiblicher Waldläufer aus einem Fantasy JRPG mit grüner Lederrüstung und einem Bogen',
+    'Ein Ritter mit silberner Rüstung, rotem Umhang und Schild',
+    'Ein Magier mit blauer Robe und leuchtendem Stab',
+    'Ein Skelett Gegner mit Schwert',
+    'Ein roter Drache als Boss',
+    'Ein grüner Schleim Gegner',
+  ] },
+  { group: 'Animationen für vorhandene Charaktere', items: [
+    'Erstelle eine Angriff Animation für diesen Charakter',
+    'Erstelle eine Laufanimation für meinen Ritter',
+    'Erstelle eine Zauber und Sieg Animation für diesen Charakter',
+  ] },
+  { group: 'Items, Gebäude & Umgebung', items: [
+    'Ein goldenes Schwert', 'Ein Heiltrank', 'Ein Helm mit Hörnern', 'Ein alter Schlüssel als Quest Item',
+    'Eine alte verfallene Burg mit Moos und zerstörten Mauern', 'Eine Holzhütte mit Moos auf dem Dach', 'Eine Tür', 'Eine Windmühle', 'Eine Tanne mit Schnee', 'Ein Brunnen',
+  ] },
+  { group: 'Karten, Effekte & UI', items: [
+    'Ein Waldgebiet für eine RPG Karte', 'Kerker Dungeon Tiles', 'Strand mit Wasser Tiles', 'Ein Feuerzauber für einen Magier', 'Ein Heilzauber', 'Explosion Effekt', 'Ein Inventar UI im Holzstil',
+  ] },
+  { group: '3D-Voxel (MagicaVoxel-Stil)', items: [
+    '3D Voxel: Ein kleiner Fantasy-Krieger mit grüner Rüstung, Schwert und Umhang im Stil eines alten JRPGs',
+    '3D Voxel: Eine mittelalterliche Holzhütte mit Moos auf dem Dach und einem kleinen Lagerfeuer',
+    '3D Voxel: Ein roter Drache im Pixel-Art-Stil',
+  ] },
+];
+
+const OUTPUTS: { id: OutputKind | 'auto'; name: string }[] = [
+  { id: 'auto', name: 'Automatisch' },
+  { id: 'sprite', name: '2D-Sprite' },
+  { id: 'voxel', name: '3D-Voxel' },
+  { id: 'tileset', name: 'Tileset/Karte' },
+  { id: 'effect', name: 'Effekt' },
+  { id: 'ui', name: 'UI-Kit' },
 ];
 
 /**
@@ -27,6 +54,10 @@ export const EXAMPLE_PROMPTS = [
 export function TopBar({ onExport }: { onExport: () => void }) {
   const prompt = useEditor((s) => s.prompt);
   const generating = useEditor((s) => s.generating);
+  const busy = useGame((s) => s.busy);
+  const output = useGame((s) => s.output);
+  const workspace = useGame((s) => s.workspace);
+  const isBusy = generating || !!busy;
   const set = useEditor((s) => s.set);
   const [showExamples, setShowExamples] = useState(false);
   const [showProjects, setShowProjects] = useState(false);
@@ -62,7 +93,7 @@ export function TopBar({ onExport }: { onExport: () => void }) {
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
-              runGeneration();
+              runAssetGeneration();
             }
           }}
           aria-label="Text-Prompt"
@@ -72,25 +103,41 @@ export function TopBar({ onExport }: { onExport: () => void }) {
         </button>
         {showExamples && (
           <div className="examples" onMouseLeave={() => setShowExamples(false)}>
-            {EXAMPLE_PROMPTS.map((p) => (
-              <button
-                key={p}
-                onClick={() => {
-                  set({ prompt: p });
-                  setShowExamples(false);
-                }}
-              >
-                {p}
-              </button>
+            {EXAMPLE_PROMPTS.map((grp) => (
+              <div key={grp.group}>
+                <div className="label-sm" style={{ padding: '6px 8px 2px' }}>{grp.group}</div>
+                {grp.items.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => {
+                      const voxel = p.startsWith('3D Voxel: ');
+                      set({ prompt: voxel ? p.slice(10) : p });
+                      useGame.getState().set({ output: voxel ? 'voxel' : 'auto' });
+                      setShowExamples(false);
+                    }}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         )}
-        <button className="btn primary generate" onClick={() => runGeneration()} disabled={generating} title="Generieren (Enter)">
-          {generating ? <span className="spinner" /> : <Icon name="spark" />}
-          {generating ? 'Generiere…' : 'Generieren'}
+        <select className="output-select" value={output} title="Ausgabeformat" onChange={(e) => useGame.getState().set({ output: e.target.value as OutputKind | 'auto' })}>
+          {OUTPUTS.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+        </select>
+        <button className="btn primary generate" onClick={() => runAssetGeneration()} disabled={isBusy} title="Generieren (Enter)">
+          {isBusy ? <span className="spinner" /> : <Icon name="spark" />}
+          {isBusy ? 'Generiere…' : 'Generieren'}
         </button>
       </div>
 
+      {workspace !== 'voxel' ? (
+        <div className="top-actions">
+          <button className="btn" onClick={exportGameFile} title="Spielprojekt (alle Assets + Stilprofile) als Datei speichern">Projekt speichern</button>
+          <button className="btn" onClick={() => exportProjectGodot(useGame.getState().project)} title="Alle Assets als Godot-Ordnerstruktur (ZIP)">Godot-Export</button>
+        </div>
+      ) : (
       <div className="top-actions">
         <button className="btn" onClick={newProject} title="Neues leeres Projekt">
           Neu
@@ -124,6 +171,7 @@ export function TopBar({ onExport }: { onExport: () => void }) {
           Exportieren ▾
         </button>
       </div>
+      )}
       {showProjects && <ProjectsDialog onClose={() => setShowProjects(false)} onOpenFile={() => fileRef.current?.click()} />}
     </header>
   );
