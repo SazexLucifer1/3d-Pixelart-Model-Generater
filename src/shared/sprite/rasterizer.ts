@@ -3,7 +3,7 @@ import { packKey } from '../voxel/VoxelModel';
 import type { Voxel } from '../voxel/types';
 import type { StyleProfile, ViewMode } from '../style/profile';
 import { colorRamp, lockColor } from '../style/profile';
-import { shade, nearestColor } from '../palette/color';
+import { shade, nearestColor, mix } from '../palette/color';
 
 /**
  * ============================================================================
@@ -111,6 +111,8 @@ interface Hit {
   v: Voxel;
   n: Vec3; // Flächennormale im Modellraum
   t: number;
+  /** Getroffenes Glas vor dem eigentlichen Voxel (durchscheinend). */
+  glass?: Voxel;
 }
 
 class VoxelGrid {
@@ -129,7 +131,8 @@ class VoxelGrid {
   }
 
   /** Amanatides-Woo-DDA durch das Voxelgitter. */
-  cast(o: Vec3, d: Vec3, maxT = 1e4, skipFirst = false): Hit | null {
+  cast(o: Vec3, d: Vec3, maxT = 1e4, skipFirst = false, seeThroughGlass = false): Hit | null {
+    let glassHit: Hit | null = null;
     // Schnitt mit der Bounding-Box
     let t0 = 0, t1 = maxT;
     for (let i = 0; i < 3; i++) {
@@ -171,20 +174,23 @@ class VoxelGrid {
     for (let guard = 0; guard < 2048; guard++) {
       if (!(skipFirst && first)) {
         const v = this.get(cell[0], cell[1], cell[2]);
-        if (v) return { v, n, t };
+        if (v) {
+          if (!seeThroughGlass || v.m !== 'glass') return glassHit ? { v, n, t, glass: glassHit.v } : { v, n, t };
+          glassHit ??= { v, n, t };
+        }
       }
       first = false;
       let axis = 0;
       if (tMax[1] < tMax[axis]) axis = 1;
       if (tMax[2] < tMax[axis]) axis = 2;
       t = tMax[axis];
-      if (t > t1) return null;
+      if (t > t1) return glassHit;
       cell[axis] += step[axis];
       tMax[axis] += tDelta[axis];
       n = [0, 0, 0];
       n[axis] = -step[axis];
     }
-    return null;
+    return glassHit;
   }
 }
 
@@ -229,7 +235,7 @@ export function rasterize(model: VoxelModel, o: RasterOptions): RasterResult {
             origin[2] + cam.R[2] * fx + cam.U[2] * fy - cam.D[2] * far,
           ];
           const ro = rotY(world, -yaw, origin);
-          const hit = grid.cast(ro, Dm);
+          const hit = grid.cast(ro, Dm, 1e4, false, true);
           if (!hit) continue;
           opaque++;
           const color = shadeHit(hit, ro, Dm, Lm, grid, profile, rampOf, levels);
@@ -270,6 +276,12 @@ export function rasterize(model: VoxelModel, o: RasterOptions): RasterResult {
 }
 
 function shadeHit(hit: Hit, ro: Vec3, d: Vec3, L: Vec3, grid: VoxelGrid, profile: StyleProfile, rampOf: (c: number) => string[], levels: number): string {
+  if (hit.glass) {
+    // Inhalt hinter Glas: Innenfarbe leicht mit der Glasfarbe mischen
+    const inner = shadeHit({ ...hit, glass: undefined }, ro, d, L, grid, profile, rampOf, levels);
+    const g = rampOf(hit.glass.c);
+    return lockColor(mix(inner, g[g.length - 1], 0.3), profile);
+  }
   const ramp = rampOf(hit.v.c);
   if (hit.v.m === 'emissive') return ramp[ramp.length - 1];
   let l = dot(hit.n, L);

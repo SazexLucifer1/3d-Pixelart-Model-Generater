@@ -1,6 +1,7 @@
 import type { BuildContext } from '../context';
 import { hash3 } from '../Sculptor';
 import { shade } from '../../../palette/color';
+import { ruin } from './props';
 
 /**
  * Gebäude: Haus/Hütte, Turm, Burg.
@@ -156,6 +157,7 @@ export function buildHouse(ctx: BuildContext): void {
     }
     s.cylinder(-W - 2, 1, D - 1, 1, 3, '#7a4a28', { noise: 0.1 });
   }
+  if (has('ruined')) ruin(ctx, 0.4);
 }
 
 // ============================================================================
@@ -205,6 +207,7 @@ export function buildTower(ctx: BuildContext): void {
     s.layer('Kristall', 'light');
     s.set(0, h + 1 + r(9) + 1, 0, '#a070ff', { m: 'emissive', e: 1 });
   }
+  if (has('ruined')) ruin(ctx, 0.45);
 }
 
 // ============================================================================
@@ -265,4 +268,5 @@ export function buildCastle(ctx: BuildContext): void {
   const fy = kh + K + 2;
   s.box(0, fy, -2, 0, fy + r(4), -2, '#3a3036');
   s.box(1, fy + r(2), -2, r(4), fy + r(4), -2, flag);
+  if (ctx.has('ruined')) ruin(ctx, 0.55);
 }

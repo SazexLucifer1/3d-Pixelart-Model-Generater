@@ -67,6 +67,11 @@ export type ArchetypeId =
   | 'rock'
   | 'weapon'
   | 'potion'
+  | 'item'
+  | 'furniture'
+  | 'structure'
+  | 'terrain'
+  | 'critter'
   | 'custom';
 
 /**

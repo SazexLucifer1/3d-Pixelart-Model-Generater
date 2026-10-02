@@ -16,9 +16,16 @@ export function buildTree(ctx: BuildContext): void {
   const variant = spec.variant ?? 'oak';
   const trunk = col('trunk', variant === 'birch' ? '#e8e4dc' : '#6e4628');
   const leafDefault: Record<string, string> = {
-    oak: '#4a9a3a', pine: '#2e6a3e', autumn: '#d8782a', cherry: '#f4a0c0', dead: '#6e4628', palm: '#5aaa3a', birch: '#7ab84a', magic: '#5ae0c8',
+    oak: '#4a9a3a', bush: '#4a9a3a', pine: '#2e6a3e', autumn: '#d8782a', cherry: '#f4a0c0', dead: '#6e4628', palm: '#5aaa3a', birch: '#7ab84a', magic: '#5ae0c8',
   };
   const leaves = col('leaves', leafDefault[variant] ?? leafDefault.oak);
+
+  if (variant === 'bush') {
+    s.layer('Busch', 'leaves');
+    for (const [x, z, rad] of [[0, 0, r(6)], [r(4), r(1), r(4.5)], [-r(4), -r(1), r(4.5)]] as const) s.ellipsoid(x, r(3), z, rad, rad * 0.75, rad, leaves, { noise: 0.15 });
+    if (has('fruit') || s.detail >= 3) s.recolorWhere((x, y, z) => hash3(x, y, z, 21) > 0.93 && !s.has(x, y + 1, z), col('fruit', '#e03030'));
+    return;
+  }
 
   // Stamm mit Wurzeln
   s.layer('Stamm', 'trunk');

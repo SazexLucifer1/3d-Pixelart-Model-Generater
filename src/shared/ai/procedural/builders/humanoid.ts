@@ -26,18 +26,19 @@ export function buildHumanoid(ctx: BuildContext): void {
   const variant = spec.variant ?? 'warrior';
   const isSkeleton = variant === 'skeleton';
   const isRobot = variant === 'robot';
+  const isGolem = variant === 'golem';
   const detail = s.detail;
 
   // ---------------------------------------------------------------- Farben
-  const skin = col('skin', isSkeleton ? C.bone : variant === 'zombie' ? '#7fa65a' : isRobot ? C.silver : C.skin);
+  const skin = col('skin', isSkeleton ? C.bone : variant === 'zombie' ? '#7fa65a' : isRobot ? C.silver : isGolem ? '#7c7f8a' : C.skin);
   const hair = col('hair', variant === 'mage' ? '#d8d8e0' : '#6b3f22');
-  const armor = col('armor', isRobot ? '#8c96a8' : variant === 'mage' ? '#3d4fb0' : '#9aa4b2');
+  const armor = col('armor', isRobot ? '#8c96a8' : isGolem ? '#6a6d78' : variant === 'mage' ? '#3d4fb0' : '#9aa4b2');
   const cloth = col('cloth', variant === 'mage' ? shade(armor, -0.25) : '#4a4058');
   const boots = col('boots', '#5a3a24');
   const cape = col('cape', '#a8283a');
   const metal = col('metal', '#c9d3dd');
   const accent = col('accent', C.gold);
-  const eyes = col('eyes', isRobot ? '#4fe8ff' : '#2a2238');
+  const eyes = col('eyes', isRobot || isGolem ? '#4fe8ff' : '#2a2238');
   const gem = col('gem', '#3fd0ff');
 
   // ---------------------------------------------------------------- Maße
@@ -138,8 +139,9 @@ export function buildHumanoid(ctx: BuildContext): void {
       s.set(side * eyeX0, eyeY, hd, '#ff3838', { m: 'emissive', e: 1 });
     });
     s.box(-2, headBottom + 1, hd, 2, headBottom + 1, hd, '#1a1420');
-  } else if (isRobot) {
-    s.box(-hw + 1, eyeY, hd, hw - 1, eyeY + eyeH, hd, eyes, { m: 'emissive', e: 1 });
+  } else if (isRobot || isGolem) {
+    if (isGolem) s.mirrored((side) => s.box(side * eyeX0, eyeY, hd, side * eyeX1, eyeY + eyeH, hd, eyes, { m: 'emissive', e: 1 }));
+    else s.box(-hw + 1, eyeY, hd, hw - 1, eyeY + eyeH, hd, eyes, { m: 'emissive', e: 1 });
   } else {
     s.mirrored((side) => {
       s.box(side * eyeX0, eyeY, hd, side * eyeX1, eyeY + eyeH, hd, eyes);
@@ -165,7 +167,7 @@ export function buildHumanoid(ctx: BuildContext): void {
     }
     // Helmbusch
     if (detail >= 2) s.box(0, headTop + 2, -hd, 0, headTop + 2 + r(2), hd - 1, cape);
-  } else if (!isSkeleton && !isRobot && !has('bald')) {
+  } else if (!isSkeleton && !isRobot && !isGolem && !has('bald')) {
     const fringe = Math.max(1, Math.round(headH * 0.22));
     s.box(-hw - 1, headTop - fringe, -hd - 1, hw + 1, headTop + 1, hd + 1, hair, { noise: 0.06 });
     s.box(-hw - 1, headBottom + r(1), -hd - 1, hw + 1, headTop, -hd - 1, hair, { noise: 0.06 }); // hinten
